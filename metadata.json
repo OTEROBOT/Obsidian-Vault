@@ -1,0 +1,6 @@
+{
+  "name": "Obsidian Vault",
+  "description": "Ultra-fast, luxury cyber-dark link and bookmark management vault with embedded media viewer, advanced fuzzy search, and OpenGraph scraper.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
