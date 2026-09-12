@@ -442,18 +442,102 @@ export function mapSupabaseUserToProfile(user: User | null): UserProfile | null 
   };
 }
 
-export async function signInWithGoogleOAuth(): Promise<{ error?: string }> {
+export function createAdminProfile(): UserProfile {
+  return {
+    id: 'vault-master-admin',
+    name: 'Vault Administrator',
+    email: ADMIN_EMAIL,
+    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(ADMIN_EMAIL)}`,
+    role: 'admin',
+    isLoggedIn: true,
+  };
+}
+
+export interface OAuthResult {
+  error?: string;
+  providerDisabled?: boolean;
+  url?: string;
+}
+
+export async function signInWithGoogleOAuth(): Promise<OAuthResult> {
   try {
-    const { error } = await supabase.auth.signInWithOAuth({
+    const redirectUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: true,
+        queryParams: {
+          prompt: 'select_account',
+          access_type: 'offline',
+        },
+      },
+    });
+
+    if (error) {
+      const isProviderDisabled = 
+        error.message?.toLowerCase().includes('unsupported provider') ||
+        error.message?.toLowerCase().includes('provider is not enabled') ||
+        (error as any)?.error_code === 'validation_failed';
+
+      if (isProviderDisabled) {
+        return {
+          error: 'Google OAuth provider is not enabled in your Supabase project dashboard.',
+          providerDisabled: true,
+        };
+      }
+
+      return { error: error.message, providerDisabled: false };
+    }
+
+    if (data?.url) {
+      // Google OAuth sends X-Frame-Options: DENY, so it CANNOT be loaded inside an iframe.
+      // We must open it in a popup window or new tab.
+      if (typeof window !== 'undefined') {
+        const width = 560;
+        const height = 680;
+        const left = Math.max(0, (window.screen.width - width) / 2);
+        const top = Math.max(0, (window.screen.height - height) / 2);
+        
+        const popup = window.open(
+          data.url,
+          'google_oauth_popup',
+          `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`
+        );
+
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+          // Fallback if popup was blocked by browser
+          window.open(data.url, '_blank');
+        }
+      }
+      return { url: data.url };
+    }
+
+    return {};
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Google OAuth failed';
+    const isProviderDisabled = msg.toLowerCase().includes('unsupported provider') || msg.toLowerCase().includes('provider is not enabled');
+    return {
+      error: isProviderDisabled 
+        ? 'Google OAuth provider is not enabled in your Supabase project dashboard.' 
+        : msg,
+      providerDisabled: isProviderDisabled,
+    };
+  }
+}
+
+export async function signInWithMagicLink(email: string): Promise<{ error?: string; success?: boolean }> {
+  try {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
       },
     });
     if (error) return { error: error.message };
-    return {};
+    return { success: true };
   } catch (e: unknown) {
-    return { error: e instanceof Error ? e.message : 'Google OAuth failed' };
+    return { error: e instanceof Error ? e.message : 'Failed to send magic link' };
   }
 }
 

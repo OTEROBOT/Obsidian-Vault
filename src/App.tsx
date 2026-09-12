@@ -131,6 +131,35 @@ export default function App() {
 
   // Listen for Supabase Authentication State Changes
   useEffect(() => {
+    // If this window was opened as an OAuth popup and completed authentication, notify opener and close
+    if (typeof window !== 'undefined' && window.opener && window.name === 'google_oauth_popup') {
+      try {
+        window.opener.postMessage({ type: 'SUPABASE_OAUTH_COMPLETED' }, '*');
+        setTimeout(() => {
+          window.close();
+        }, 800);
+      } catch (e) {
+        console.warn('OAuth popup notice error:', e);
+      }
+    }
+
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'SUPABASE_OAUTH_COMPLETED') {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            const profile = mapSupabaseUserToProfile(session.user);
+            if (profile) {
+              setUser(profile);
+              saveUser(profile);
+              showToast(`${t.toasts.welcome}, ${profile.name}`);
+              setIsAuthOpen(false);
+            }
+          }
+        });
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session?.user) {
@@ -139,6 +168,7 @@ export default function App() {
             setUser(profile);
             saveUser(profile);
             showToast(`${t.toasts.welcome}, ${profile.name}`);
+            setIsAuthOpen(false);
           }
         } else if (event === 'SIGNED_OUT') {
           setUser(INITIAL_USER);
@@ -160,6 +190,7 @@ export default function App() {
       });
 
     return () => {
+      window.removeEventListener('message', handleMessage);
       authListener?.subscription.unsubscribe();
     };
   }, [t]);
