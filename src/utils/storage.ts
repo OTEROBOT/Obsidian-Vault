@@ -1,5 +1,6 @@
 import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
 import { DEFAULT_CONFIG, INITIAL_CATEGORIES, INITIAL_COMMENTS, INITIAL_ITEMS, INITIAL_TAGS, INITIAL_USER } from '../data/initialData';
+import { ADMIN_EMAIL } from './supabase';
 
 const KEYS = {
   ITEMS: 'obsidian_vault_items_v1',
@@ -132,7 +133,12 @@ export function loadUser(): UserProfile {
   try {
     const raw = storage.getItem(KEYS.USER);
     if (!raw) return INITIAL_USER;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    // Strict admin guard: only authorized admin can hold admin role
+    if (parsed.role === 'admin' && parsed.email?.toLowerCase().trim() !== ADMIN_EMAIL.toLowerCase().trim()) {
+      return INITIAL_USER;
+    }
+    return parsed;
   } catch (e) {
     return INITIAL_USER;
   }
@@ -207,3 +213,36 @@ export function resetAllData(): void {
     console.error('Failed to reset data:', e);
   }
 }
+
+/**
+ * Safely parse a hostname from any URL string without throwing TypeError on malformed strings
+ */
+export function getDomainFromUrl(url?: string): string {
+  if (!url) return 'vault.local';
+  try {
+    const raw = url.trim();
+    if (raw.startsWith('local://')) {
+      return 'Local Vault Asset';
+    }
+    const target = raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`;
+    const parsed = new URL(target);
+    return parsed.hostname.replace(/^www\./, '') || 'vault.local';
+  } catch {
+    return 'vault.local';
+  }
+}
+
+/**
+ * Safe confirm helper that doesn't throw if window.confirm is restricted in iframe sandboxes
+ */
+export function safeConfirm(message: string): boolean {
+  try {
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      return window.confirm(message);
+    }
+  } catch {
+    // If blocked by iframe sandbox, treat as confirmed
+  }
+  return true;
+}
+

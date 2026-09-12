@@ -12,6 +12,88 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        // Prevent crashes when environment or third-party extensions attempt to set window.fetch
+        // in iframe sandboxes where window.fetch is configured with a getter only.
+        try {
+          var originalFetch = window.fetch;
+          var desc = Object.getOwnPropertyDescriptor(window, 'fetch') ||
+                     Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window) || {}, 'fetch') ||
+                     (typeof Window !== 'undefined' && Object.getOwnPropertyDescriptor(Window.prototype, 'fetch'));
+
+          if (desc && desc.get && !desc.set) {
+            try {
+              Object.defineProperty(window, 'fetch', {
+                get: function() {
+                  return originalFetch;
+                },
+                set: function(fn) {
+                  originalFetch = fn;
+                },
+                configurable: true,
+                enumerable: true
+              });
+            } catch (e1) {
+              if (typeof Window !== 'undefined' && Window.prototype) {
+                try {
+                  Object.defineProperty(Window.prototype, 'fetch', {
+                    get: function() {
+                      return originalFetch;
+                    },
+                    set: function(fn) {
+                      originalFetch = fn;
+                    },
+                    configurable: true,
+                    enumerable: true
+                  });
+                } catch (e2) {}
+              }
+            }
+          }
+        } catch (e) {}
+
+        // Catch and suppress uncaught "Cannot set property fetch of #<Window> which has only a getter" error
+        window.addEventListener('error', function(event) {
+          if (event && event.message && event.message.indexOf('fetch') !== -1 && event.message.indexOf('getter') !== -1) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+            return true;
+          }
+        }, true);
+      })();
+    </script>
+    <script>
+      (function() {
+        try {
+          var savedTheme = localStorage.getItem('obsidian_vault_theme');
+          var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = true;
+          if (savedTheme === 'light') {
+            isDark = false;
+          } else if (savedTheme === 'system') {
+            isDark = systemDark;
+          }
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+            document.documentElement.setAttribute('data-theme', 'dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+            document.documentElement.setAttribute('data-theme', 'light');
+            document.documentElement.style.colorScheme = 'light';
+          }
+          var savedLang = localStorage.getItem('obsidian_vault_lang');
+          if (savedLang) {
+            document.documentElement.setAttribute('lang', savedLang);
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-[#090a0f] text-slate-100 antialiased selection:bg-cyan-500/30 selection:text-cyan-200 min-h-screen overflow-x-hidden">
     <div id="root"></div>

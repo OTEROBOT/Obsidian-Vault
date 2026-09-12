@@ -23,11 +23,21 @@ import {
   ExternalLink,
   ChevronRight
 } from 'lucide-react';
-import { Category, Comment, MediaItem, SystemConfig, Tag } from '../types';
+import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
+import { 
+  checkSupabaseHealth, 
+  syncLocalDataToSupabase, 
+  SUPABASE_URL, 
+  ADMIN_EMAIL, 
+  STORAGE_BUCKET 
+} from '../utils/supabase';
+import { POSTGRES_SCHEMA_SQL } from '../data/supabaseSchema';
+import { safeConfirm } from '../utils/storage';
 
 interface AdminDashboardProps {
   isOpen: boolean;
   onClose: () => void;
+  currentUser: UserProfile;
   items: MediaItem[];
   categories: Category[];
   tags: Tag[];
@@ -49,6 +59,7 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isOpen,
   onClose,
+  currentUser,
   items,
   categories,
   tags,
@@ -69,6 +80,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'overview' | 'links' | 'taxonomies' | 'comments' | 'config' | 'schema'>('overview');
   const [copiedSql, setCopiedSql] = useState(false);
 
+  // Supabase Cloud State
+  const [healthStatus, setHealthStatus] = useState<{
+    tested: boolean;
+    loading: boolean;
+    isConnected: boolean;
+    tablesReady: boolean;
+    bucketReady: boolean;
+    error?: string;
+  }>({
+    tested: false,
+    loading: false,
+    isConnected: false,
+    tablesReady: false,
+    bucketReady: false,
+  });
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const isRealAdmin = currentUser?.isLoggedIn && currentUser?.role === 'admin' && currentUser?.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
+
+  if (!isOpen) return null;
+
+  if (!isRealAdmin) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+        <div className="w-full max-w-md p-8 rounded-3xl glass-panel border border-rose-500/40 shadow-2xl text-center space-y-5 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+            <Shield className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-lg font-bold text-slate-100 font-display">
+              ADMIN AUTHORIZATION REQUIRED
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Administrative Command Nexus is restricted strictly to verified administrator{' '}
+              <span className="text-amber-400 font-mono font-semibold">{ADMIN_EMAIL}</span> via Google Sign-In.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl text-xs font-semibold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30 transition-all"
+          >
+            Dismiss & Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleTestSupabase = async () => {
+    setHealthStatus(prev => ({ ...prev, loading: true }));
+    const res = await checkSupabaseHealth();
+    setHealthStatus({
+      tested: true,
+      loading: false,
+      isConnected: res.isConnected,
+      tablesReady: res.tablesReady,
+      bucketReady: res.bucketReady,
+      error: res.error,
+    });
+  };
+
+  const handleSyncToSupabase = async () => {
+    setSyncLoading(true);
+    setSyncMessage('Syncing local vault data to Supabase database...');
+    const res = await syncLocalDataToSupabase(items, categories, tags);
+    if (res.success) {
+      setSyncMessage(`Synced ${res.itemsSynced} links, categories & tags to Supabase!`);
+    } else {
+      setSyncMessage(`Sync notice: ${res.error || 'Please execute schema.sql in Supabase SQL editor'}`);
+    }
+    setSyncLoading(false);
+    setTimeout(() => setSyncMessage(null), 6000);
+  };
+
   // New Category State
   const [newCatName, setNewCatName] = useState('');
   const [newCatSlug, setNewCatSlug] = useState('');
@@ -83,6 +169,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [vaultNameInput, setVaultNameInput] = useState(config.vaultName);
   const [vaultTaglineInput, setVaultTaglineInput] = useState(config.vaultTagline);
   const [allowGuestComments, setAllowGuestComments] = useState(config.allowGuestComments);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -102,7 +189,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       vaultTagline: vaultTaglineInput.trim(),
       allowGuestComments,
     });
-    alert('System configuration updated successfully!');
+    setSaveNotice('System configuration updated successfully!');
+    setTimeout(() => setSaveNotice(null), 3000);
   };
 
   const handleCreateCategory = (e: React.FormEvent) => {
@@ -145,164 +233,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     a.click();
   };
 
-  // Complete PostgreSQL Schema & RLS Policies SQL Script
-  const POSTGRES_SCHEMA_SQL = `-- =========================================================================
--- OBSIDIAN VAULT (VOIDMARK) - PRODUCTION POSTGRESQL & SUPABASE SCHEMA
--- Features: Row Level Security (RLS), Role RBAC (Single Admin vs Guests),
--- Full-Text GIN Index Search, and Automated Trigger Updaters
--- =========================================================================
-
--- 1. Enable Required Extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For ultra-fast fuzzy proximity search
-
--- 2. User Profiles Table (Linked with Supabase auth.users)
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
-  full_name TEXT,
-  avatar_url TEXT,
-  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user', 'guest')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 3. Categories Table
-CREATE TABLE IF NOT EXISTS public.categories (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  slug TEXT NOT NULL UNIQUE,
-  description TEXT,
-  icon TEXT DEFAULT 'Compass',
-  color TEXT DEFAULT '#38bdf8',
-  parent_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 4. Custom Tags Table
-CREATE TABLE IF NOT EXISTS public.tags (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  color TEXT DEFAULT '#22d3ee',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 5. Media & Links Table
-CREATE TABLE IF NOT EXISTS public.links (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT,
-  url TEXT NOT NULL,
-  media_type TEXT NOT NULL CHECK (media_type IN ('web', 'image', 'video', 'audio')),
-  thumbnail_url TEXT,
-  media_url TEXT, -- Direct storage or stream URL for uploaded media
-  embed_type TEXT DEFAULT 'none' CHECK (embed_type IN ('none', 'youtube', 'vimeo', 'html5_video', 'audio', 'image', 'iframe')),
-  embed_id TEXT,
-  category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
-  site_name TEXT,
-  favicon TEXT,
-  views_count BIGINT DEFAULT 0,
-  likes_count BIGINT DEFAULT 0,
-  is_pinned BOOLEAN DEFAULT FALSE,
-  source TEXT DEFAULT 'url' CHECK (source IN ('url', 'upload')),
-  file_name TEXT,
-  file_size TEXT,
-  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  
-  -- Generated Full-Text Search column with English dictionary
-  search_vector tsvector GENERATED ALWAYS AS (
-    setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-    setweight(to_tsvector('english', coalesce(description, '')), 'B') ||
-    setweight(to_tsvector('english', coalesce(site_name, '')), 'C')
-  ) STORED
-);
-
--- 6. Link Tags Association Table (Many-to-Many)
-CREATE TABLE IF NOT EXISTS public.link_tags (
-  link_id UUID REFERENCES public.links(id) ON DELETE CASCADE,
-  tag_id UUID REFERENCES public.tags(id) ON DELETE CASCADE,
-  PRIMARY KEY (link_id, tag_id)
-);
-
--- 7. Comments Table
-CREATE TABLE IF NOT EXISTS public.comments (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  link_id UUID NOT NULL REFERENCES public.links(id) ON DELETE CASCADE,
-  author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  author_name TEXT NOT NULL,
-  author_avatar TEXT,
-  author_email TEXT,
-  is_google_user BOOLEAN DEFAULT FALSE,
-  is_admin BOOLEAN DEFAULT FALSE,
-  content TEXT NOT NULL,
-  likes_count INT DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 8. Indexes for Ultra-Fast Queries
-CREATE INDEX IF NOT EXISTS idx_links_search ON public.links USING GIN (search_vector);
-CREATE INDEX IF NOT EXISTS idx_links_category ON public.links (category_id);
-CREATE INDEX IF NOT EXISTS idx_links_media_type ON public.links (media_type);
-CREATE INDEX IF NOT EXISTS idx_links_pinned_created ON public.links (is_pinned DESC, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_comments_link ON public.comments (link_id, created_at DESC);
-
--- =========================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
--- =========================================================================
-
--- Enable RLS on all tables
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.links ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.link_tags ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
-
--- Helper function to check if current user is Admin
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 1. Profiles Policies
-CREATE POLICY "Public profiles are viewable by everyone" 
-  ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update their own profile" 
-  ON public.profiles FOR UPDATE USING (auth.uid() = id);
-
--- 2. Links Policies (Public Read, Admin Full Write)
-CREATE POLICY "Anyone can view public links" 
-  ON public.links FOR SELECT USING (true);
-
-CREATE POLICY "Only admins can insert links" 
-  ON public.links FOR INSERT WITH CHECK (public.is_admin());
-
-CREATE POLICY "Only admins can update links" 
-  ON public.links FOR UPDATE USING (public.is_admin());
-
-CREATE POLICY "Only admins can delete links" 
-  ON public.links FOR DELETE USING (public.is_admin());
-
--- 3. Categories & Tags Policies
-CREATE POLICY "Categories are readable by everyone" ON public.categories FOR SELECT USING (true);
-CREATE POLICY "Only admins can modify categories" ON public.categories FOR ALL USING (public.is_admin());
-
-CREATE POLICY "Tags are readable by everyone" ON public.tags FOR SELECT USING (true);
-CREATE POLICY "Only admins can modify tags" ON public.tags FOR ALL USING (public.is_admin());
-
--- 4. Comments Policies (Public / Authenticated can insert; Admins can delete)
-CREATE POLICY "Comments viewable by everyone" ON public.comments FOR SELECT USING (true);
-CREATE POLICY "Anyone or authenticated can add comments" ON public.comments FOR INSERT WITH CHECK (true);
-CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DELETE 
-  USING (public.is_admin() OR auth.uid() = author_id);
-`;
+  // POSTGRES_SCHEMA_SQL imported from ../data/supabaseSchema
 
   const copySqlToClipboard = () => {
     navigator.clipboard.writeText(POSTGRES_SCHEMA_SQL);
@@ -311,9 +242,12 @@ CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DEL
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md overflow-y-auto"
+      onClick={onClose}
+    >
       <div 
-        className="relative w-full max-w-5xl rounded-3xl glass-panel border border-amber-500/30 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden my-auto max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-5xl rounded-3xl glass-panel border border-amber-500/30 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden my-auto max-h-[92vh] flex flex-col transform-gpu gpu-layer animate-in fade-in-50 zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         
@@ -352,7 +286,7 @@ CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DEL
             { id: 'taxonomies', label: 'Categories & Tags', icon: <FolderPlus className="w-4 h-4" /> },
             { id: 'comments', label: 'Comments', icon: <MessageSquare className="w-4 h-4" /> },
             { id: 'config', label: 'System Config', icon: <Settings className="w-4 h-4" /> },
-            { id: 'schema', label: 'PostgreSQL DDL & Next.js', icon: <Database className="w-4 h-4 text-cyan-400" /> },
+            { id: 'schema', label: 'Supabase Cloud & SQL', icon: <Database className="w-4 h-4 text-cyan-400" /> },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -374,6 +308,18 @@ CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DEL
 
         {/* Tab Content Panels */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Toast Notification Banner */}
+          {saveNotice && (
+            <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top-2 duration-150">
+              <span className="font-medium">{saveNotice}</span>
+              <button 
+                onClick={() => setSaveNotice(null)}
+                className="text-emerald-400 hover:text-white ml-2 text-sm font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
           
           {/* TAB 1: OVERVIEW METRICS */}
           {activeTab === 'overview' && (
@@ -530,7 +476,7 @@ CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DEL
                                 </button>
                                 <button
                                   onClick={() => {
-                                    if (window.confirm(`Delete "${item.title}"?`)) {
+                                    if (safeConfirm(`Delete "${item.title}"?`)) {
                                       onDeleteLink(item.id);
                                     }
                                   }}
@@ -782,9 +728,10 @@ CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DEL
                 </p>
                 <button
                   onClick={() => {
-                    if (window.confirm('Reset all vault entries, categories, and comments to default?')) {
+                    if (safeConfirm('Reset all vault entries, categories, and comments to default?')) {
                       onResetSampleData();
-                      alert('Data restored to initial seeds!');
+                      setSaveNotice('Data restored to initial seeds!');
+                      setTimeout(() => setSaveNotice(null), 3000);
                     }
                   }}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-all"
@@ -796,34 +743,132 @@ CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DEL
             </div>
           )}
 
-          {/* TAB 6: POSTGRESQL DDL & NEXT.JS APP ROUTER ARCHITECTURE */}
+          {/* TAB 6: SUPABASE CLOUD & POSTGRESQL DDL */}
           {activeTab === 'schema' && (
             <div className="space-y-6">
               
-              {/* Architecture Overview */}
-              <div className="rounded-2xl glass-panel-subtle p-5 border border-white/10 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-cyan-400">
-                    <Code className="w-5 h-5" />
-                    <h3 className="text-sm font-bold text-slate-100 font-mono">
-                      Production Next.js (App Router) + Supabase Tech Stack
-                    </h3>
+              {/* Supabase Cloud Live Control & Diagnostics */}
+              <div className="rounded-2xl glass-panel-subtle p-5 border border-cyan-500/30 space-y-4 bg-cyan-950/10">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-cyan-400">
+                      <Database className="w-5 h-5" />
+                      <h3 className="text-sm font-bold text-slate-100 font-mono tracking-wide">
+                        Supabase Cloud Database & Storage Nexus
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Project ID: <span className="font-mono text-cyan-300">itdepagafihwvtklxfql</span> &bull; Bucket: <span className="font-mono text-cyan-300">{STORAGE_BUCKET}</span>
+                    </p>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
-                    PostgreSQL 16 + RLS
-                  </span>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleTestSupabase}
+                      disabled={healthStatus.loading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition-all disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${healthStatus.loading ? 'animate-spin' : ''}`} />
+                      <span>{healthStatus.loading ? 'Testing...' : 'Test Connection'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSyncToSupabase}
+                      disabled={syncLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 transition-all disabled:opacity-50"
+                    >
+                      <Download className={`w-3.5 h-3.5 ${syncLoading ? 'animate-bounce' : ''}`} />
+                      <span>{syncLoading ? 'Syncing...' : 'Sync Local Data to Supabase'}</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="text-xs text-slate-300 leading-relaxed font-mono bg-black/60 p-4 rounded-xl border border-white/5 space-y-1">
-                  <p className="text-cyan-400 font-bold">// Recommended Next.js App Router Structure:</p>
-                  <p>app/</p>
-                  <p>├── api/scrape-og/route.ts &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// OpenGraph Metadata Web Scraper</p>
-                  <p>├── api/auth/callback/route.ts &nbsp;&nbsp;&nbsp;&nbsp;// Supabase / NextAuth OAuth Handlers</p>
-                  <p>├── dashboard/page.tsx &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// Protected Single-Admin Dashboard</p>
-                  <p>├── vault/[id]/page.tsx &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// Dedicated SEO Link & Media Landing</p>
-                  <p>├── layout.tsx &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// Root Cyber Glass Layout & Theme Provider</p>
-                  <p>└── page.tsx &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// Ultra-Fast Main Vault Explorer</p>
+                {/* Health & Diagnostic Badges */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase">Supabase Client API</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${healthStatus.tested ? (healthStatus.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400') : 'bg-slate-500'}`} />
+                      <span className="text-xs font-semibold text-slate-200 font-mono">
+                        {healthStatus.tested ? (healthStatus.isConnected ? 'Connected (200 OK)' : 'Check Credentials') : 'Not Checked'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase">Database Tables (vault_items)</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${healthStatus.tested ? (healthStatus.tablesReady ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-slate-500'}`} />
+                      <span className="text-xs font-semibold text-slate-200 font-mono">
+                        {healthStatus.tested ? (healthStatus.tablesReady ? 'Tables Ready' : 'Execute SQL in Supabase') : 'Pending Test'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase">Storage Bucket (vault-media)</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${healthStatus.tested ? (healthStatus.bucketReady ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-slate-500'}`} />
+                      <span className="text-xs font-semibold text-slate-200 font-mono">
+                        {healthStatus.tested ? (healthStatus.bucketReady ? 'Bucket Active' : 'Created by SQL') : 'Pending Test'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
+
+                {syncMessage && (
+                  <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-xs font-mono text-cyan-300 flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{syncMessage}</span>
+                  </div>
+                )}
+
+                {/* Quick Link Buttons to Supabase Dashboard */}
+                <div className="flex items-center gap-2 pt-2 border-t border-white/5 flex-wrap">
+                  <span className="text-[11px] text-slate-400">Quick Dashboard Links:</span>
+                  <a
+                    href="https://supabase.com/dashboard/project/itdepagafihwvtklxfql/sql"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 underline font-mono px-2 py-0.5 rounded bg-cyan-500/10"
+                  >
+                    <span>Supabase SQL Editor</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href="https://supabase.com/dashboard/project/itdepagafihwvtklxfql/storage/buckets"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 underline font-mono px-2 py-0.5 rounded bg-purple-500/10"
+                  >
+                    <span>Storage Buckets</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href="https://supabase.com/dashboard/project/itdepagafihwvtklxfql/auth/providers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 underline font-mono px-2 py-0.5 rounded bg-amber-500/10"
+                  >
+                    <span>Auth Providers (Google)</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Instructions Banner */}
+              <div className="rounded-2xl glass-panel-subtle p-4 border border-white/10 bg-black/40 space-y-2">
+                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">
+                  Setup Instructions (Run Once in Supabase):
+                </h4>
+                <ol className="text-xs text-slate-300 space-y-1 list-decimal list-inside leading-relaxed">
+                  <li>Click <span className="font-semibold text-cyan-300">"Copy SQL Script"</span> below.</li>
+                  <li>Click <a href="https://supabase.com/dashboard/project/itdepagafihwvtklxfql/sql" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline inline-flex items-center gap-0.5"><span>Open Supabase SQL Editor</span> <ExternalLink className="w-2.5 h-2.5" /></a> and paste the SQL script into a new query.</li>
+                  <li>Click <span className="font-semibold text-emerald-300">Run</span> (Cmd+Enter or Ctrl+Enter) to initialize tables (<code className="text-cyan-300">vault_items</code>, <code className="text-cyan-300">vault_categories</code>, etc.) and create the <code className="text-cyan-300">vault-media</code> storage bucket.</li>
+                  <li>Return here and click <span className="font-semibold text-amber-300">"Sync Local Data to Supabase"</span> to push all existing links to the cloud database!</li>
+                </ol>
               </div>
 
               {/* PostgreSQL DDL SQL Schema */}
@@ -832,15 +877,16 @@ CREATE POLICY "Admins or authors can delete comments" ON public.comments FOR DEL
                   <div className="flex items-center gap-2">
                     <Database className="w-4 h-4 text-cyan-400" />
                     <span className="text-xs font-mono font-bold text-slate-200">
-                      supabase-schema.sql (Fully Defined DDL + RLS Policies)
+                      schema.sql (Complete Supabase Tables, RLS Policies & Storage)
                     </span>
                   </div>
                   <button
+                    type="button"
                     onClick={copySqlToClipboard}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition-all"
                   >
                     {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedSql ? 'Copied SQL!' : 'Copy SQL Script'}</span>
+                    <span>{copiedSql ? 'Copied to Clipboard!' : 'Copy SQL Script'}</span>
                   </button>
                 </div>
 

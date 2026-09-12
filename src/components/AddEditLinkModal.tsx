@@ -14,12 +14,15 @@ import {
   Tag as TagIcon,
   Loader2
 } from 'lucide-react';
-import { Category, EmbedType, MediaItem, MediaType, Tag } from '../types';
+import { Category, EmbedType, MediaItem, MediaType, Tag, UserProfile } from '../types';
+import { uploadMediaToSupabaseStorage, STORAGE_BUCKET, ADMIN_EMAIL } from '../utils/supabase';
+import { getDomainFromUrl } from '../utils/storage';
 
 interface AddEditLinkModalProps {
   initialItem?: MediaItem | null;
   categories: Category[];
   tags: Tag[];
+  currentUser?: UserProfile;
   onSave: (item: Partial<MediaItem>) => void;
   onClose: () => void;
 }
@@ -28,9 +31,12 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   initialItem,
   categories,
   tags,
+  currentUser,
   onSave,
   onClose,
 }) => {
+  const isRealAdmin = currentUser?.isLoggedIn && currentUser?.role === 'admin' && currentUser?.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
+
   const isEditing = Boolean(initialItem);
   const [activeTab, setActiveTab] = useState<'url' | 'upload'>(initialItem?.source === 'upload' ? 'upload' : 'url');
 
@@ -49,16 +55,19 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   const [localMediaUrl, setLocalMediaUrl] = useState<string>(initialItem?.mediaUrl || '');
   const [fileName, setFileName] = useState(initialItem?.fileName || '');
   const [fileSize, setFileSize] = useState(initialItem?.fileSize || '');
+  const [isUploadingToBucket, setIsUploadingToBucket] = useState(false);
+  const [storageStatusMessage, setStorageStatusMessage] = useState<string | null>(null);
 
   // Scraping status
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState<string | null>(null);
   const [scrapeSuccess, setScrapeSuccess] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Tag input state
   const [tagInput, setTagInput] = useState('');
 
-  // Handle OpenGraph auto-scraper
+  // Handle OpenGraph auto-scraper with dual engine (local serverless + Microlink API)
   const handleScrapeMetadata = async () => {
     if (!url || !url.trim().startsWith('http')) {
       setScrapeError('Please enter a valid URL starting with http:// or https://');
@@ -69,27 +78,65 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
     setScrapeError(null);
     setScrapeSuccess(false);
 
-    try {
-      const res = await fetch(`/api/scrape-og?url=${encodeURIComponent(url.trim())}`);
-      if (!res.ok) {
-        throw new Error('Failed to fetch OpenGraph metadata');
-      }
-      const data = await res.json();
+    const cleanUrl = url.trim();
 
-      if (data.title) setTitle(data.title);
-      if (data.description) setDescription(data.description);
-      if (data.image) setThumbnailUrl(data.image);
-      if (data.mediaType) setMediaType(data.mediaType);
+    try {
+      let scraped = false;
+
+      // 1. Primary: Try local /api/scrape-og endpoint
+      try {
+        const res = await fetch(`/api/scrape-og?url=${encodeURIComponent(cleanUrl)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && !data.fallback && data.title) {
+            if (data.title) setTitle(data.title);
+            if (data.description) setDescription(data.description);
+            if (data.image) setThumbnailUrl(data.image);
+            if (data.mediaType) setMediaType(data.mediaType);
+            scraped = true;
+          }
+        }
+      } catch {
+        // Continue to Microlink
+      }
+
+      // 2. Secondary fallback: Microlink API (https://api.microlink.io) for Vercel or external networks
+      if (!scraped) {
+        try {
+          const microRes = await fetch(`https://api.microlink.io?url=${encodeURIComponent(cleanUrl)}`);
+          if (microRes.ok) {
+            const microData = await microRes.json();
+            if (microData?.status === 'success' && microData?.data) {
+              const d = microData.data;
+              if (d.title) setTitle(d.title);
+              if (d.description) setDescription(d.description);
+              if (d.image?.url) setThumbnailUrl(d.image.url);
+              if (d.publisher) {
+                // Keep track if needed
+              }
+              scraped = true;
+            }
+          }
+        } catch {
+          // Continue to hostname parser
+        }
+      }
+
+      // 3. Fallback: Parse hostname and set sensible default thumbnail
+      if (!scraped) {
+        const domain = getDomainFromUrl(cleanUrl);
+        if (!title) setTitle(domain);
+        if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
+      }
 
       setScrapeSuccess(true);
       setTimeout(() => setScrapeSuccess(false), 3000);
     } catch (err: any) {
       console.warn('Scraping error:', err);
-      // Fallback: parse host name
       try {
-        const parsed = new URL(url);
-        if (!title) setTitle(parsed.hostname);
-        if (!thumbnailUrl) setThumbnailUrl(`https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80`);
+        const domain = getDomainFromUrl(cleanUrl);
+        if (!title) setTitle(domain);
+        if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
         setScrapeSuccess(true);
       } catch {
         setScrapeError('Could not auto-scrape. Please fill in details manually.');
@@ -99,8 +146,8 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
     }
   };
 
-  // Handle local file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle local file upload + Supabase 'vault-media' Storage Bucket
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -124,6 +171,28 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
       setMediaType('image');
       setThumbnailUrl(objectUrl);
     }
+
+    // Direct upload to Supabase Storage 'vault-media'
+    setIsUploadingToBucket(true);
+    setStorageStatusMessage('Uploading to Supabase vault-media bucket...');
+    try {
+      const uploadRes = await uploadMediaToSupabaseStorage(file, 'vault-media');
+      if (uploadRes.url) {
+        setLocalMediaUrl(uploadRes.url);
+        setUrl(uploadRes.url);
+        if (file.type.startsWith('image/')) {
+          setThumbnailUrl(uploadRes.url);
+        }
+        setStorageStatusMessage(`Saved to Supabase storage bucket '${STORAGE_BUCKET}'!`);
+      } else {
+        setStorageStatusMessage(`Using local memory buffer (Bucket '${STORAGE_BUCKET}' needs schema.sql setup).`);
+      }
+    } catch {
+      setStorageStatusMessage('Storage upload deferred to local buffer.');
+    } finally {
+      setIsUploadingToBucket(false);
+      setTimeout(() => setStorageStatusMessage(null), 5000);
+    }
   };
 
   const handleAddTag = () => {
@@ -141,13 +210,13 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      alert('Title is required');
+      setFormError('Title is required');
       return;
     }
 
     const finalUrl = activeTab === 'url' ? url.trim() : (localMediaUrl || url.trim() || 'local://uploaded-asset');
     if (!finalUrl) {
-      alert('A valid URL or uploaded file is required');
+      setFormError('A valid URL or uploaded file is required');
       return;
     }
 
@@ -175,6 +244,15 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
       embedType = 'iframe';
     }
 
+    if (currentUser && !isRealAdmin) {
+      setFormError(`Access denied: Administrator credentials (${ADMIN_EMAIL}) required.`);
+      return;
+    }
+
+    setFormError(null);
+
+    const domain = getDomainFromUrl(finalUrl);
+
     onSave({
       title: title.trim(),
       description: description.trim(),
@@ -190,15 +268,18 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
       source: activeTab,
       fileName: activeTab === 'upload' ? fileName : undefined,
       fileSize: activeTab === 'upload' ? fileSize : undefined,
-      siteName: activeTab === 'url' ? new URL(finalUrl).hostname.replace('www.', '') : 'Local Vault Storage',
-      favicon: activeTab === 'url' ? `https://www.google.com/s2/favicons?domain=${new URL(finalUrl).hostname}&sz=32` : undefined,
+      siteName: activeTab === 'url' ? domain : 'Local Vault Storage',
+      favicon: activeTab === 'url' ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : undefined,
     });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto"
+      onClick={onClose}
+    >
       <div 
-        className="relative w-full max-w-2xl rounded-3xl glass-panel border border-cyan-500/30 shadow-2xl overflow-hidden my-auto"
+        className="relative w-full max-w-2xl rounded-3xl glass-panel border border-cyan-500/30 shadow-2xl overflow-hidden my-auto transform-gpu gpu-layer animate-in fade-in-50 zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         
@@ -322,6 +403,20 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
                   )}
                 </div>
               </div>
+
+              {isUploadingToBucket && (
+                <div className="flex items-center gap-2 text-xs text-cyan-300 py-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                  <span>Uploading to Supabase vault-media bucket...</span>
+                </div>
+              )}
+
+              {storageStatusMessage && !isUploadingToBucket && (
+                <p className="text-[11px] text-cyan-400 flex items-center gap-1.5 py-1">
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{storageStatusMessage}</span>
+                </p>
+              )}
             </div>
           )}
 
@@ -459,6 +554,14 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Form Error Banner */}
+          {formError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{formError}</span>
+            </div>
+          )}
 
           {/* Footer Submit */}
           <div className="pt-4 border-t border-white/10 flex items-center justify-end gap-3">

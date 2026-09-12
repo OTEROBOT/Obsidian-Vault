@@ -2,6 +2,11 @@
  * Core type definitions for Obsidian Vault (VoidMark)
  */
 
+export type Language = 'en' | 'th' | 'ja' | 'zh' | 'es';
+
+export type ThemeMode = 'dark' | 'light' | 'system';
+export type ResolvedTheme = 'dark' | 'light';
+
 export type MediaType = 'web' | 'image' | 'video' | 'audio';
 
 export type EmbedType = 'none' | 'youtube' | 'vimeo' | 'html5_video' | 'audio' | 'image' | 'iframe';

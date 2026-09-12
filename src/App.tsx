@@ -4,13 +4,12 @@ import {
   Search, 
   SlidersHorizontal, 
   Sparkles, 
-  AlertCircle, 
   Inbox, 
   CheckCircle2, 
   Clock,
   Compass,
-  ArrowUpRight,
-  Database
+  Database,
+  ArrowUpRight
 } from 'lucide-react';
 import { 
   Category, 
@@ -39,6 +38,16 @@ import {
   saveTags, 
   saveUser 
 } from './utils/storage';
+import { 
+  supabase, 
+  fetchItemsFromSupabase, 
+  saveItemToSupabase, 
+  deleteItemFromSupabase, 
+  mapSupabaseUserToProfile,
+  signOutSupabaseAuth,
+  ADMIN_EMAIL
+} from './utils/supabase';
+import { INITIAL_USER } from './data/initialData';
 import { fuzzySearchMedia } from './utils/fuzzySearch';
 import { Navbar } from './components/Navbar';
 import { FilterBar } from './components/FilterBar';
@@ -48,8 +57,15 @@ import { AddEditLinkModal } from './components/AddEditLinkModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { RecentlyViewedDrawer } from './components/RecentlyViewedDrawer';
 import { AuthModal } from './components/AuthModal';
+import { MobileDrawer } from './components/MobileDrawer';
+import { BottomNavBar } from './components/BottomNavBar';
+import { useTranslation } from './context/LanguageContext';
+import { useTheme } from './context/ThemeContext';
 
 export default function App() {
+  const { t } = useTranslation();
+  const { theme, resolvedTheme } = useTheme();
+
   // Core Persistent State
   const [items, setItems] = useState<MediaItem[]>(() => loadItems());
   const [categories, setCategories] = useState<Category[]>(() => loadCategories());
@@ -58,6 +74,15 @@ export default function App() {
   const [user, setUser] = useState<UserProfile>(() => loadUser());
   const [recentRecords, setRecentRecords] = useState(() => loadRecentlyViewed());
   const [config, setConfig] = useState<SystemConfig>(() => loadConfig());
+
+  // Strict verified administrator authorization check
+  const isRealAdmin = useMemo(() => {
+    return (
+      user.isLoggedIn &&
+      user.role === 'admin' &&
+      user.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim()
+    );
+  }, [user]);
 
   // Search & Filter State
   const [filters, setFilters] = useState<SearchFilters>({
@@ -78,6 +103,7 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isRecentOpen, setIsRecentOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Floating Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -90,67 +116,93 @@ export default function App() {
   // Keyboard shortcut listener for fast search (Ctrl + K or '/')
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        const searchInput = document.querySelector('input[placeholder*="Fuzzy search"]') as HTMLInputElement;
-        if (searchInput) searchInput.focus();
+        const searchInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Category item counts calculation
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const item of items) {
-      counts[item.categoryId] = (counts[item.categoryId] || 0) + 1;
-    }
-    return counts;
-  }, [items]);
+  // Listen for Supabase Authentication State Changes
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session?.user) {
+          const profile = mapSupabaseUserToProfile(session.user);
+          if (profile) {
+            setUser(profile);
+            saveUser(profile);
+            showToast(`${t.toasts.welcome}, ${profile.name}`);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(INITIAL_USER);
+          saveUser(INITIAL_USER);
+        }
+      }
+    );
 
-  // Comment counts map by itemId
-  const commentCountsMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const c of comments) {
-      map[c.itemId] = (map[c.itemId] || 0) + 1;
-    }
-    return map;
-  }, [comments]);
+    // Hydrate remote links from Supabase cloud database if available
+    fetchItemsFromSupabase()
+      .then((remoteItems) => {
+        if (remoteItems && remoteItems.length > 0) {
+          setItems(remoteItems);
+          saveItems(remoteItems);
+        }
+      })
+      .catch((err) => {
+        console.warn('Supabase remote fetch warning:', err);
+      });
 
-  // Advanced Multi-filtering & Fuzzy Ranking Pipeline
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [t]);
+
+  // Filtered & Fuzzy Searched Items Memo
   const filteredItems = useMemo(() => {
-    // 1. Fuzzy Search Filtering
-    let result = fuzzySearchMedia(items, filters.query);
+    let result = [...items];
 
-    // 2. Category Filter
-    if (filters.categoryId !== 'cat-all') {
+    // 1. Fuzzy query filter
+    if (filters.query.trim()) {
+      result = fuzzySearchMedia(result, filters.query.trim());
+    }
+
+    // 2. Category filter
+    if (filters.categoryId !== 'all' && filters.categoryId !== 'cat-all') {
       result = result.filter((item) => item.categoryId === filters.categoryId);
     }
 
-    // 3. Media Type Filter (Video, Audio, Image, Web)
+    // 3. Media type filter
     if (filters.mediaType !== 'all') {
       result = result.filter((item) => item.mediaType === filters.mediaType);
     }
 
-    // 4. Tag Filter
+    // 4. Tag filter
     if (filters.tag !== 'all') {
       result = result.filter((item) => item.tags.includes(filters.tag));
     }
 
-    // 5. Pinned Only Filter
+    // 5. Pinned only filter
     if (filters.pinnedOnly) {
       result = result.filter((item) => item.isPinned);
     }
 
-    // 6. Sorting Pipeline
-    return [...result].sort((a, b) => {
-      // Pinned items bubble to top by default unless specific sort applied
+    // 6. Sorting logic
+    result.sort((a, b) => {
+      // Pinned items always rise to the top unless specifically sorting differently
       if (a.isPinned !== b.isPinned) {
         return a.isPinned ? -1 : 1;
       }
 
       switch (filters.sortBy) {
+        case 'newest':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         case 'oldest':
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         case 'views':
@@ -159,25 +211,75 @@ export default function App() {
           return (b.likesCount || 0) - (a.likesCount || 0);
         case 'title':
           return a.title.localeCompare(b.title);
-        case 'newest':
         default:
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return 0;
       }
     });
+
+    return result;
   }, [items, filters]);
+
+  // Virtualized progressive windowing for 60-120 FPS rendering on Safari & iPad
+  const [visibleCount, setVisibleCount] = useState(18);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset pagination window when filters change
+  useEffect(() => {
+    setVisibleCount(18);
+  }, [filters]);
+
+  // Infinite progressive loading via IntersectionObserver
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + 12, filteredItems.length));
+        }
+      },
+      { rootMargin: '400px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [filteredItems.length]);
+
+  const renderedItems = useMemo(() => {
+    return filteredItems.slice(0, visibleCount);
+  }, [filteredItems, visibleCount]);
+
+  // Category counts memo
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    items.forEach((item) => {
+      counts[item.categoryId] = (counts[item.categoryId] || 0) + 1;
+    });
+    return counts;
+  }, [items]);
+
+  // Comment counts map
+  const commentCountsMap = useMemo(() => {
+    const counts: Record<string, number> = {};
+    comments.forEach((c) => {
+      counts[c.itemId] = (counts[c.itemId] || 0) + 1;
+    });
+    return counts;
+  }, [comments]);
 
   // Handlers
   const handleOpenPreview = (item: MediaItem) => {
-    // Increment view count
-    const updatedItems = items.map((i) => 
+    // Record recently viewed
+    const updatedRecords = recordRecentlyViewed(item.id);
+    setRecentRecords(updatedRecords);
+
+    // Increment local views count
+    const updated = items.map((i) =>
       i.id === item.id ? { ...i, viewsCount: (i.viewsCount || 0) + 1 } : i
     );
-    setItems(updatedItems);
-    saveItems(updatedItems);
-
-    // Record in recently viewed
-    const updatedRecents = recordRecentlyViewed(item.id);
-    setRecentRecords(updatedRecents);
+    setItems(updated);
+    saveItems(updated);
 
     // Set preview item
     setPreviewItem({ ...item, viewsCount: (item.viewsCount || 0) + 1 });
@@ -189,41 +291,53 @@ export default function App() {
     );
     setItems(updated);
     saveItems(updated);
-    showToast('Vault link liked!');
+    showToast(t.toasts.linkLiked);
   };
 
   const handleTogglePin = (itemId: string) => {
+    if (!isRealAdmin) {
+      showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+      return;
+    }
     const updated = items.map((i) =>
       i.id === itemId ? { ...i, isPinned: !i.isPinned } : i
     );
     setItems(updated);
     saveItems(updated);
-    showToast('Pin state updated');
+    showToast(t.toasts.pinUpdated);
   };
 
   const handleDeleteItem = (itemId: string) => {
+    if (!isRealAdmin) {
+      showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+      return;
+    }
     const updated = items.filter((i) => i.id !== itemId);
     setItems(updated);
     saveItems(updated);
+    deleteItemFromSupabase(itemId).catch((e) => console.warn('Supabase delete sync notice:', e));
     if (previewItem?.id === itemId) setPreviewItem(null);
-    showToast('Entry removed from vault');
+    showToast(t.toasts.entryRemoved);
   };
 
   const handleSaveLink = (data: Partial<MediaItem>) => {
+    if (!isRealAdmin) {
+      showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+      return;
+    }
+
     if (editingItem) {
       // Update existing
-      const updated = items.map((i) =>
-        i.id === editingItem.id
-          ? {
-              ...i,
-              ...data,
-              updatedAt: new Date().toISOString(),
-            }
-          : i
-      );
+      const updatedItem: MediaItem = {
+        ...editingItem,
+        ...data,
+        updatedAt: new Date().toISOString(),
+      };
+      const updated = items.map((i) => (i.id === editingItem.id ? updatedItem : i));
       setItems(updated);
       saveItems(updated);
-      showToast('Vault link updated successfully');
+      saveItemToSupabase(updatedItem).catch((e) => console.warn('Supabase update sync notice:', e));
+      showToast(t.toasts.linkUpdated);
     } else {
       // Create new
       const newItem: MediaItem = {
@@ -253,7 +367,8 @@ export default function App() {
       const updated = [newItem, ...items];
       setItems(updated);
       saveItems(updated);
-      showToast('New media link vaulted!');
+      saveItemToSupabase(newItem).catch((e) => console.warn('Supabase insert sync notice:', e));
+      showToast(t.toasts.newLinkVaulted);
     }
 
     setIsAddEditOpen(false);
@@ -268,7 +383,7 @@ export default function App() {
       authorAvatar: user.isLoggedIn ? user.avatar : `https://api.dicebear.com/7.x/bottts/svg?seed=${guestNickname || 'Guest'}`,
       authorEmail: user.isLoggedIn ? user.email : undefined,
       isGoogleUser: user.isLoggedIn && user.email.includes('@gmail.com'),
-      isAdmin: user.role === 'admin',
+      isAdmin: isRealAdmin,
       content,
       createdAt: new Date().toISOString(),
       likes: 0,
@@ -277,29 +392,44 @@ export default function App() {
     const updated = [newComment, ...comments];
     setComments(updated);
     saveComments(updated);
-    showToast('Comment published to discussion');
+    showToast(t.toasts.commentPublished);
   };
 
   const handleDeleteComment = (commentId: string) => {
+    const target = comments.find((c) => c.id === commentId);
+    const canDelete =
+      isRealAdmin ||
+      (user.isLoggedIn &&
+        target?.authorEmail &&
+        user.email.toLowerCase().trim() === target.authorEmail.toLowerCase().trim());
+
+    if (!canDelete) {
+      showToast(t.toasts.permissionDenied);
+      return;
+    }
+
     const updated = comments.filter((c) => c.id !== commentId);
     setComments(updated);
     saveComments(updated);
-    showToast('Comment deleted');
+    showToast(t.toasts.commentDeleted);
   };
 
-  // Category & Tag Handlers
   const handleAddCategory = (catData: Omit<Category, 'id'>) => {
-    const newCat: Category = {
-      id: `cat-${Date.now()}`,
+    const newCategory: Category = {
       ...catData,
+      id: `cat-${Date.now()}`,
     };
-    const updated = [...categories, newCat];
+    const updated = [...categories, newCategory];
     setCategories(updated);
     saveCategories(updated);
-    showToast(`Category "${newCat.name}" created`);
+    showToast(`Category "${newCategory.name}" created`);
   };
 
   const handleDeleteCategory = (catId: string) => {
+    if (catId === 'cat-all') {
+      showToast('Default category cannot be removed');
+      return;
+    }
     const updated = categories.filter((c) => c.id !== catId);
     setCategories(updated);
     saveCategories(updated);
@@ -308,8 +438,8 @@ export default function App() {
 
   const handleAddTag = (tagData: Omit<Tag, 'id'>) => {
     const newTag: Tag = {
-      id: `tag-${Date.now()}`,
       ...tagData,
+      id: `tag-${Date.now()}`,
     };
     const updated = [...tags, newTag];
     setTags(updated);
@@ -327,44 +457,50 @@ export default function App() {
   const handleSaveConfig = (newConfig: SystemConfig) => {
     setConfig(newConfig);
     saveConfig(newConfig);
-    showToast('System configuration saved');
+    showToast('Vault configuration updated');
   };
 
   const handleResetSampleData = () => {
-    resetAllData();
-    setItems(loadItems());
-    setCategories(loadCategories());
-    setTags(loadTags());
-    setComments(loadComments());
-    setConfig(loadConfig());
-    setRecentRecords([]);
-    showToast('Vault reset to demo seeds');
+    if (window.confirm('Reset all vault links, categories and comments to initial defaults?')) {
+      resetAllData();
+      setItems(loadItems());
+      setCategories(loadCategories());
+      setTags(loadTags());
+      setComments(loadComments());
+      setConfig(loadConfig());
+      showToast('Vault restored to default showcase state');
+    }
   };
 
   const handleClearHistory = () => {
     clearRecentlyViewed();
     setRecentRecords([]);
-    showToast('Recently viewed history cleared');
+    showToast('Viewing history cleared');
   };
 
   const handleLogin = (newUser: UserProfile) => {
     setUser(newUser);
     saveUser(newUser);
-    showToast(`Signed in as ${newUser.name} (${newUser.role.toUpperCase()})`);
+    showToast(`Welcome back, ${newUser.name}`);
   };
 
-  const handleLogout = () => {
-    const guestUser: UserProfile = {
-      id: 'usr-guest',
-      name: 'Guest Explorer',
-      email: 'guest@obsidian.local',
-      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Guest',
-      role: 'guest',
-      isLoggedIn: false,
-    };
-    setUser(guestUser);
-    saveUser(guestUser);
-    showToast('Signed out of vault');
+  const handleLogout = async () => {
+    await signOutSupabaseAuth();
+    setUser(INITIAL_USER);
+    saveUser(INITIAL_USER);
+    showToast('Signed out of Obsidian Vault');
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const focusSearchInput = () => {
+    const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+    if (input) {
+      input.focus();
+      input.select();
+    }
   };
 
   return (
@@ -372,8 +508,8 @@ export default function App() {
       
       {/* Sleek Floating Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-2xl glass-panel border border-cyan-500/50 shadow-2xl text-xs font-semibold text-cyan-300 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+        <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-2xl glass-panel border border-cyan-500/50 shadow-2xl text-xs font-semibold text-cyan-300 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -384,69 +520,73 @@ export default function App() {
         onOpenAuth={() => setIsAuthOpen(true)}
         onLogout={handleLogout}
         onOpenAddLink={() => {
-          setEditingItem(null);
-          setIsAddEditOpen(true);
+          if (isRealAdmin) {
+            setEditingItem(null);
+            setIsAddEditOpen(true);
+          } else {
+            showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+          }
         }}
-        onOpenAdmin={() => setIsAdminOpen(true)}
+        onOpenAdmin={() => {
+          if (isRealAdmin) {
+            setIsAdminOpen(true);
+          } else {
+            showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+          }
+        }}
         onOpenRecent={() => setIsRecentOpen(true)}
         recentCount={recentRecords.length}
         searchQuery={filters.query}
         onSearchChange={(q) => setFilters({ ...filters, query: q })}
         vaultName={config.vaultName}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
       />
 
-      {/* Main Container Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* Main Container Area - Responsive for Mobile, Tablet, Laptop, Desktop, and Smart TVs */}
+      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20 md:pb-8">
         
         {/* Top Hero Banner Strip */}
-        <div className="relative rounded-3xl glass-panel p-6 sm:p-8 overflow-hidden border border-cyan-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+        <div className="relative rounded-2xl sm:rounded-3xl glass-panel p-5 sm:p-8 overflow-hidden border border-cyan-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
           <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
           <div className="absolute -left-16 -bottom-16 w-64 h-64 rounded-full bg-purple-500/10 blur-3xl pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-2xl">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+            <div className="space-y-1.5 sm:space-y-2 max-w-2xl">
               <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs uppercase tracking-widest">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Hyper-Indexed Cyber Vault</span>
+                <span>{t.hero.badge}</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold font-display tracking-wide text-slate-100">
-                {config.vaultName}
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold font-display tracking-wide text-slate-100">
+                {config.vaultName || t.common.appName}
               </h1>
-              <p className="text-sm text-slate-400 leading-relaxed">
-                {config.vaultTagline}
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+                {config.vaultTagline || t.hero.subtitle}
               </p>
             </div>
 
-            {/* Quick Stats & Architecture Shortcut */}
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={() => setIsAdminOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 hover:border-cyan-500/30 transition-all shadow-md"
-              >
-                <Database className="w-4 h-4 text-cyan-400" />
-                <span>View Schema SQL</span>
-              </button>
+            {/* Quick Admin Actions (Visible exclusively to verified Admin) */}
+            {isRealAdmin && (
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+                <button
+                  onClick={() => setIsAdminOpen(true)}
+                  className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 hover:border-cyan-500/30 transition-all shadow-md touch-target"
+                >
+                  <Database className="w-4 h-4 text-cyan-400" />
+                  <span>{t.nav.admin}</span>
+                </button>
 
-              {user.role === 'admin' ? (
                 <button
                   onClick={() => {
                     setEditingItem(null);
                     setIsAddEditOpen(true);
                   }}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 transition-all shadow-lg shadow-cyan-500/20"
+                  className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 transition-all shadow-lg shadow-cyan-500/20 touch-target"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Vault New Link</span>
+                  <span>{t.nav.addLink}</span>
                 </button>
-              ) : (
-                <button
-                  onClick={() => setIsAuthOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all"
-                >
-                  <span>Admin Mode (Unlock Full CRUD)</span>
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -466,22 +606,22 @@ export default function App() {
         {filters.query && (
           <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs text-cyan-300">
             <span>
-              Fuzzy search results for <strong className="font-mono text-white">"{filters.query}"</strong>
+              {t.filters.searchResultsFor} <strong className="font-mono text-white">"{filters.query}"</strong>
             </span>
-            <span className="font-mono">({filteredItems.length} matches found)</span>
+            <span className="font-mono">({filteredItems.length} {t.filters.matchesFound})</span>
           </div>
         )}
 
-        {/* Media Bookmarks Grid / List */}
+        {/* Media Bookmarks Grid / List - Fluid Cross-Device Breakpoints */}
         {filteredItems.length === 0 ? (
-          <div className="rounded-3xl glass-panel p-12 text-center flex flex-col items-center justify-center space-y-4 border border-white/10">
+          <div className="rounded-3xl glass-panel p-8 sm:p-12 text-center flex flex-col items-center justify-center space-y-4 border border-white/10">
             <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
               <Inbox className="w-8 h-8" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-base font-semibold text-slate-200">No vault entries matched</h3>
+              <h3 className="text-base font-semibold text-slate-200">{t.empty.noEntries}</h3>
               <p className="text-xs text-slate-400 max-w-sm">
-                Try loosening your search terms, changing the media category, or resetting active filters.
+                {t.empty.noEntriesDesc}
               </p>
             </div>
             <button
@@ -493,52 +633,126 @@ export default function App() {
                 sortBy: 'newest',
                 pinnedOnly: false,
               })}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 transition-colors touch-target"
             >
-              Reset All Filters
+              {t.empty.resetFilters}
             </button>
           </div>
         ) : (
-          <div className={
-            viewMode === 'grid'
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-              : 'space-y-4'
-          }>
-            {filteredItems.map((item) => {
-              const category = categories.find((c) => c.id === item.categoryId);
-              return (
-                <MediaCard
-                  key={item.id}
-                  item={item}
-                  category={category}
-                  user={user}
-                  commentCount={commentCountsMap[item.id] || 0}
-                  onPreview={handleOpenPreview}
-                  onLike={handleLikeItem}
-                  onEdit={(it) => {
-                    setEditingItem(it);
-                    setIsAddEditOpen(true);
-                  }}
-                  onDelete={handleDeleteItem}
-                  onTogglePin={handleTogglePin}
-                  onSelectTag={(t) => setFilters({ ...filters, tag: t })}
-                />
-              );
-            })}
-          </div>
+          <>
+            <div className={
+              viewMode === 'grid'
+                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6 gap-4 sm:gap-6'
+                : 'space-y-4'
+            }>
+              {renderedItems.map((item) => {
+                const category = categories.find((c) => c.id === item.categoryId);
+                return (
+                  <MediaCard
+                    key={item.id}
+                    item={item}
+                    category={category}
+                    user={user}
+                    commentCount={commentCountsMap[item.id] || 0}
+                    onPreview={handleOpenPreview}
+                    onLike={handleLikeItem}
+                    onEdit={(it) => {
+                      setEditingItem(it);
+                      setIsAddEditOpen(true);
+                    }}
+                    onDelete={handleDeleteItem}
+                    onTogglePin={handleTogglePin}
+                    onSelectTag={(tg) => setFilters({ ...filters, tag: tg })}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Virtualization Sentinel & Progressive Loader */}
+            {renderedItems.length < filteredItems.length && (
+              <div 
+                ref={sentinelRef}
+                className="w-full py-8 flex flex-col items-center justify-center space-y-2 text-xs text-slate-400"
+              >
+                <div className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[11px] text-slate-500">
+                    {renderedItems.length} / {filteredItems.length} {t.filters.matchesFound}
+                  </span>
+                  <button
+                    onClick={() => setVisibleCount(filteredItems.length)}
+                    className="text-[11px] font-medium text-cyan-400 hover:text-cyan-300 underline"
+                  >
+                    Load all
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
       </main>
 
       {/* Footer */}
-      <footer className="w-full border-t border-white/5 py-8 mt-12 text-center text-xs text-slate-500 space-y-2">
+      <footer className="w-full border-t border-white/5 py-8 mt-8 text-center text-xs text-slate-500 space-y-2 pb-24 md:pb-8">
         <p className="font-mono text-[11px] text-slate-400">
-          OBSIDIAN VAULT • ARCHITECTURAL LINK & EMBEDDED MEDIA VAULT
+          {config.vaultName || t.common.appName} • {t.footer.rights}
         </p>
-        <p className="text-[11px] text-slate-600">
-          Powered by Next.js App Router Architecture, Supabase PostgreSQL RLS, and OpenGraph Microservices.
+        <p className="text-[11px] text-slate-600 max-w-xl mx-auto px-4">
+          {t.footer.tagline}
         </p>
       </footer>
+
+      {/* Mobile Bottom Navigation Bar (Smartphones & Handhelds) */}
+      <BottomNavBar
+        user={user}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+        onOpenRecent={() => setIsRecentOpen(true)}
+        onOpenAddLink={() => {
+          if (isRealAdmin) {
+            setEditingItem(null);
+            setIsAddEditOpen(true);
+          } else {
+            showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+          }
+        }}
+        onOpenAdmin={() => {
+          if (isRealAdmin) {
+            setIsAdminOpen(true);
+          } else {
+            showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+          }
+        }}
+        onScrollToTop={scrollToTop}
+        onFocusSearch={focusSearchInput}
+        recentCount={recentRecords.length}
+      />
+
+      {/* Mobile Slide-out Drawer */}
+      <MobileDrawer
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        user={user}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onLogout={handleLogout}
+        onOpenAddLink={() => {
+          if (isRealAdmin) {
+            setEditingItem(null);
+            setIsAddEditOpen(true);
+          } else {
+            showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+          }
+        }}
+        onOpenAdmin={() => {
+          if (isRealAdmin) {
+            setIsAdminOpen(true);
+          } else {
+            showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
+          }
+        }}
+        onOpenRecent={() => setIsRecentOpen(true)}
+        recentCount={recentRecords.length}
+      />
 
       {/* Embedded Media Viewer Modal */}
       {previewItem && (
@@ -549,17 +763,18 @@ export default function App() {
           onClose={() => setPreviewItem(null)}
           onLike={handleLikeItem}
           onAddComment={handleAddComment}
-          onDeleteComment={user.role === 'admin' ? handleDeleteComment : undefined}
+          onDeleteComment={isRealAdmin ? handleDeleteComment : undefined}
           onOpenAuth={() => setIsAuthOpen(true)}
         />
       )}
 
-      {/* Add / Edit Link Modal */}
-      {isAddEditOpen && (
+      {/* Add / Edit Link Modal (Restricted strictly to verified Admin) */}
+      {isAddEditOpen && isRealAdmin && (
         <AddEditLinkModal
           initialItem={editingItem}
           categories={categories}
           tags={tags}
+          currentUser={user}
           onSave={handleSaveLink}
           onClose={() => {
             setIsAddEditOpen(false);
@@ -568,11 +783,12 @@ export default function App() {
         />
       )}
 
-      {/* Admin Command Nexus Dashboard */}
-      {isAdminOpen && (
+      {/* Admin Command Nexus Dashboard (Restricted strictly to verified Admin) */}
+      {isAdminOpen && isRealAdmin && (
         <AdminDashboard
           isOpen={isAdminOpen}
           onClose={() => setIsAdminOpen(false)}
+          currentUser={user}
           items={items}
           categories={categories}
           tags={tags}

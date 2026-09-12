@@ -225,10 +225,10 @@ export const DEFAULT_CONFIG: SystemConfig = {
 };
 
 export const INITIAL_USER: UserProfile = {
-  id: 'usr-admin-001',
-  name: 'Void Architect',
-  email: 'admin@obsidianvault.io',
-  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
-  role: 'admin',
-  isLoggedIn: true,
+  id: 'guest',
+  name: 'Guest Explorer',
+  email: '',
+  avatar: '',
+  role: 'guest',
+  isLoggedIn: false,
 };
