@@ -8,9 +8,7 @@ import {
   Check, 
   ArrowRight,
   AlertTriangle,
-  KeyRound,
   ExternalLink,
-  Sparkles,
   Send,
   HelpCircle
 } from 'lucide-react';
@@ -18,7 +16,6 @@ import { UserProfile } from '../types';
 import { 
   signInWithGoogleOAuth, 
   signInWithMagicLink, 
-  createAdminProfile, 
   ADMIN_EMAIL, 
   supabase, 
   mapSupabaseUserToProfile 
@@ -72,8 +69,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setMessage(`OAuth Notice: ${res.error}`);
           setMessageType('error');
         }
-      } else if (res.url) {
-        setMessage('Google Sign-In popup opened. Please select your Google account in the popup.');
+      } else {
+        setMessage('Redirecting to Google Sign-In...');
         setMessageType('info');
       }
     } catch (err: any) {
@@ -93,12 +90,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } finally {
       setOauthLoading(false);
     }
-  };
-
-  const handleDirectAdminLogin = () => {
-    const admin = createAdminProfile();
-    onLogin(admin);
-    onClose();
   };
 
   const handleMagicLinkSubmit = async (e: React.FormEvent) => {
@@ -297,24 +288,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Supabase Provider Not Enabled
                   </p>
                   <p className="text-slate-300 text-[11px] leading-relaxed">
-                    Google OAuth returns <code className="text-amber-300/90 font-mono bg-black/40 px-1 py-0.5 rounded">400 validation_failed</code> because the Google provider toggle is currently disabled in your Supabase project.
+                    Google OAuth returns <code className="text-amber-300/90 font-mono bg-black/40 px-1 py-0.5 rounded">400 validation_failed</code> because Google provider is currently disabled in your Supabase project. You can still sign in using the <strong className="text-cyan-300">Magic Link</strong> tab below!
                   </p>
                 </div>
-              </div>
-
-              {/* Instant Admin Sign-In bypass for oterobot@gmail.com */}
-              <div className="pt-2 border-t border-amber-500/20 space-y-1.5">
-                <button
-                  type="button"
-                  onClick={handleDirectAdminLogin}
-                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.99]"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>Instant Admin Sign-In ({ADMIN_EMAIL})</span>
-                </button>
-                <p className="text-[10px] text-slate-400 text-center font-mono">
-                  Direct verified administrator access without waiting for OAuth setup
-                </p>
               </div>
 
               {/* Guide Accordion */}
@@ -341,26 +317,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Quick Admin Access (Always accessible for convenience) */}
-          {!currentUser.isLoggedIn && !providerDisabled && (
-            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 flex items-center justify-between gap-2">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5 text-amber-400 text-xs font-semibold">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Master Administrator</span>
-                </div>
-                <p className="text-[10px] text-slate-400 font-mono">{ADMIN_EMAIL}</p>
-              </div>
-              <button
-                type="button"
-                onClick={handleDirectAdminLogin}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all touch-target"
-              >
-                Instant Enter
-              </button>
             </div>
           )}
 

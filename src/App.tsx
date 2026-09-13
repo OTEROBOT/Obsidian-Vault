@@ -36,7 +36,9 @@ import {
   saveConfig, 
   saveItems, 
   saveTags, 
-  saveUser 
+  saveUser,
+  getDeletedItemIds,
+  markItemAsDeleted
 } from './utils/storage';
 import { 
   supabase, 
@@ -47,7 +49,7 @@ import {
   signOutSupabaseAuth,
   ADMIN_EMAIL
 } from './utils/supabase';
-import { INITIAL_USER } from './data/initialData';
+import { INITIAL_USER, INITIAL_ITEMS } from './data/initialData';
 import { fuzzySearchMedia } from './utils/fuzzySearch';
 import { Navbar } from './components/Navbar';
 import { FilterBar } from './components/FilterBar';
@@ -129,37 +131,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Listen for Supabase Authentication State Changes
+  // Listen for Supabase Authentication State Changes & Sync Data
   useEffect(() => {
-    // If this window was opened as an OAuth popup and completed authentication, notify opener and close
-    if (typeof window !== 'undefined' && window.opener && window.name === 'google_oauth_popup') {
-      try {
-        window.opener.postMessage({ type: 'SUPABASE_OAUTH_COMPLETED' }, '*');
-        setTimeout(() => {
-          window.close();
-        }, 800);
-      } catch (e) {
-        console.warn('OAuth popup notice error:', e);
-      }
-    }
-
-    const handleMessage = (e: MessageEvent) => {
-      if (e.data?.type === 'SUPABASE_OAUTH_COMPLETED') {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user) {
-            const profile = mapSupabaseUserToProfile(session.user);
-            if (profile) {
-              setUser(profile);
-              saveUser(profile);
-              showToast(`${t.toasts.welcome}, ${profile.name}`);
-              setIsAuthOpen(false);
-            }
-          }
-        });
-      }
-    };
-    window.addEventListener('message', handleMessage);
-
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session?.user) {
@@ -177,12 +150,52 @@ export default function App() {
       }
     );
 
-    // Hydrate remote links from Supabase cloud database if available
+    // Hydrate remote links from Supabase cloud database with bidirectional merge
+    // Prevents deleted items from resurrecting and prevents locally added links from disappearing
     fetchItemsFromSupabase()
       .then((remoteItems) => {
-        if (remoteItems && remoteItems.length > 0) {
-          setItems(remoteItems);
-          saveItems(remoteItems);
+        if (remoteItems) {
+          const deletedIds = getDeletedItemIds();
+
+          // Filter out any items that the user previously deleted
+          const validRemote = remoteItems.filter((r) => !deletedIds.has(r.id));
+
+          // Ensure any deleted items that still exist on Supabase are permanently deleted
+          deletedIds.forEach((delId) => {
+            if (remoteItems.some((r) => r.id === delId)) {
+              deleteItemFromSupabase(delId).catch(() => {});
+            }
+          });
+
+          setItems((currentLocalItems) => {
+            // Filter local items by deletedIds
+            const validLocal = currentLocalItems.filter((loc) => !deletedIds.has(loc.id));
+            const remoteMap = new Map(validRemote.map((r) => [r.id, r]));
+
+            // Only consider items that are truly custom local creations (NOT initial template items)
+            const localOnly = validLocal.filter(
+              (loc) => !remoteMap.has(loc.id) && !INITIAL_ITEMS.some((init) => init.id === loc.id)
+            );
+
+            // Automatically sync any custom local-only items up to Supabase
+            if (localOnly.length > 0) {
+              localOnly.forEach((item) => {
+                saveItemToSupabase(item).catch(() => {});
+              });
+            }
+
+            // Combine remote items with custom local items
+            const combined = [...validRemote, ...localOnly];
+
+            // Maintain sorting & pinning
+            combined.sort((a, b) => {
+              if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
+
+            saveItems(combined);
+            return combined;
+          });
         }
       })
       .catch((err) => {
@@ -190,7 +203,6 @@ export default function App() {
       });
 
     return () => {
-      window.removeEventListener('message', handleMessage);
       authListener?.subscription.unsubscribe();
     };
   }, [t]);
@@ -343,6 +355,7 @@ export default function App() {
       showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
       return;
     }
+    markItemAsDeleted(itemId);
     const updated = items.filter((i) => i.id !== itemId);
     setItems(updated);
     saveItems(updated);

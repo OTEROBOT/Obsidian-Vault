@@ -12,11 +12,13 @@ import {
   Layers, 
   Pin, 
   Tag as TagIcon,
-  Loader2
+  Loader2,
+  Hash
 } from 'lucide-react';
 import { Category, EmbedType, MediaItem, MediaType, Tag, UserProfile } from '../types';
 import { uploadMediaToSupabaseStorage, STORAGE_BUCKET, ADMIN_EMAIL } from '../utils/supabase';
 import { getDomainFromUrl } from '../utils/storage';
+import { extractSmartTags } from '../utils/tagExtractor';
 
 interface AddEditLinkModalProps {
   initialItem?: MediaItem | null;
@@ -64,6 +66,49 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   const [scrapeSuccess, setScrapeSuccess] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Auto-generate tags state with local persistence
+  const [autoGenerateTags, setAutoGenerateTags] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('obsidian_vault_auto_tags');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+  const [addedTagsCount, setAddedTagsCount] = useState<number | null>(null);
+
+  const handleToggleAutoTags = (enabled: boolean) => {
+    setAutoGenerateTags(enabled);
+    try {
+      localStorage.setItem('obsidian_vault_auto_tags', JSON.stringify(enabled));
+    } catch {}
+  };
+
+  const applySmartTags = (targetUrl: string, targetTitle: string, targetDesc: string, publisher?: string) => {
+    const detected = extractSmartTags(targetUrl, targetTitle, targetDesc, publisher);
+    if (detected.length > 0) {
+      setItemTags((prev) => {
+        const set = new Set([...prev]);
+        let newlyAdded = 0;
+        detected.forEach((t) => {
+          if (!set.has(t)) {
+            set.add(t);
+            newlyAdded++;
+          }
+        });
+        if (newlyAdded > 0) {
+          setAddedTagsCount(newlyAdded);
+          setTimeout(() => setAddedTagsCount(null), 4000);
+        }
+        return Array.from(set);
+      });
+    }
+  };
+
+  const handleAutoGenerateTagsNow = () => {
+    applySmartTags(url, title, description);
+  };
+
   // Tag input state
   const [tagInput, setTagInput] = useState('');
 
@@ -79,6 +124,9 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
     setScrapeSuccess(false);
 
     const cleanUrl = url.trim();
+    let finalTitle = title;
+    let finalDesc = description;
+    let finalPublisher: string | undefined;
 
     try {
       let scraped = false;
@@ -89,10 +137,17 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
         if (res.ok) {
           const data = await res.json();
           if (data && !data.fallback && data.title) {
-            if (data.title) setTitle(data.title);
-            if (data.description) setDescription(data.description);
+            if (data.title) {
+              setTitle(data.title);
+              finalTitle = data.title;
+            }
+            if (data.description) {
+              setDescription(data.description);
+              finalDesc = data.description;
+            }
             if (data.image) setThumbnailUrl(data.image);
             if (data.mediaType) setMediaType(data.mediaType);
+            if (data.siteName) finalPublisher = data.siteName;
             scraped = true;
           }
         }
@@ -108,12 +163,16 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
             const microData = await microRes.json();
             if (microData?.status === 'success' && microData?.data) {
               const d = microData.data;
-              if (d.title) setTitle(d.title);
-              if (d.description) setDescription(d.description);
-              if (d.image?.url) setThumbnailUrl(d.image.url);
-              if (d.publisher) {
-                // Keep track if needed
+              if (d.title) {
+                setTitle(d.title);
+                finalTitle = d.title;
               }
+              if (d.description) {
+                setDescription(d.description);
+                finalDesc = d.description;
+              }
+              if (d.image?.url) setThumbnailUrl(d.image.url);
+              if (d.publisher) finalPublisher = d.publisher;
               scraped = true;
             }
           }
@@ -125,8 +184,16 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
       // 3. Fallback: Parse hostname and set sensible default thumbnail
       if (!scraped) {
         const domain = getDomainFromUrl(cleanUrl);
-        if (!title) setTitle(domain);
+        if (!title) {
+          setTitle(domain);
+          finalTitle = domain;
+        }
         if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
+      }
+
+      // Auto-extract and inject relevant hashtags if enabled
+      if (autoGenerateTags) {
+        applySmartTags(cleanUrl, finalTitle, finalDesc, finalPublisher);
       }
 
       setScrapeSuccess(true);
@@ -135,8 +202,15 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
       console.warn('Scraping error:', err);
       try {
         const domain = getDomainFromUrl(cleanUrl);
-        if (!title) setTitle(domain);
+        if (!title) {
+          setTitle(domain);
+          finalTitle = domain;
+        }
         if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
+        
+        if (autoGenerateTags) {
+          applySmartTags(cleanUrl, finalTitle, finalDesc, finalPublisher);
+        }
         setScrapeSuccess(true);
       } catch {
         setScrapeError('Could not auto-scrape. Please fill in details manually.');
@@ -362,15 +436,57 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
                 </button>
               </div>
 
+              {/* Scrape Controls: Auto-Tag Toggle & Quick Trigger */}
+              <div className="flex items-center justify-between pt-1 px-0.5 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-slate-300 hover:text-white transition-colors">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoGenerateTags}
+                    onClick={() => handleToggleAutoTags(!autoGenerateTags)}
+                    className={`w-8 h-4 rounded-full transition-colors relative p-0.5 inline-flex items-center ${
+                      autoGenerateTags ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`w-3 h-3 rounded-full bg-white transition-transform block ${
+                        autoGenerateTags ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                  <span className="flex items-center gap-1 text-[11px] font-mono">
+                    <Hash className="w-3 h-3 text-cyan-400" />
+                    Auto-generate tags on Scrape ({autoGenerateTags ? 'เปิด' : 'ปิด'})
+                  </span>
+                </label>
+
+                {url && (
+                  <button
+                    type="button"
+                    onClick={handleAutoGenerateTagsNow}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono flex items-center gap-1 hover:underline transition-colors"
+                    title="Generate hashtags from current URL, Title & Description"
+                  >
+                    <Sparkles className="w-2.5 h-2.5" />
+                    <span>Extract Tags</span>
+                  </button>
+                )}
+              </div>
+
               {scrapeSuccess && (
                 <p className="text-[11px] text-emerald-400 flex items-center gap-1">
-                  <Check className="w-3 h-3" />
-                  OpenGraph metadata and thumbnail extracted successfully!
+                  <Check className="w-3 h-3 shrink-0" />
+                  <span>OpenGraph metadata extracted successfully!</span>
+                  {addedTagsCount && addedTagsCount > 0 ? (
+                    <span className="text-cyan-300 font-mono font-semibold ml-1">
+                      (+{addedTagsCount} tags added)
+                    </span>
+                  ) : null}
                 </p>
               )}
               {scrapeError && (
                 <p className="text-[11px] text-amber-400 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
+                  <AlertCircle className="w-3 h-3 shrink-0" />
                   {scrapeError}
                 </p>
               )}
@@ -506,10 +622,21 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
 
           {/* Tags Input with Chips */}
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
-              <span>Tags</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-300">Tags</label>
+                <button
+                  type="button"
+                  onClick={handleAutoGenerateTagsNow}
+                  title="Auto-extract tags from current title, description and URL"
+                  className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 flex items-center gap-1 transition-colors"
+                >
+                  <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+                  <span>✨ Auto Tags</span>
+                </button>
+              </div>
               <span className="text-[10px] text-slate-500">Press Enter or comma to add</span>
-            </label>
+            </div>
             <div className="flex gap-2">
               <input
                 type="text"

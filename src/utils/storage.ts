@@ -10,6 +10,7 @@ const KEYS = {
   USER: 'obsidian_vault_user_v1',
   RECENTLY_VIEWED: 'obsidian_vault_recent_v1',
   CONFIG: 'obsidian_vault_config_v1',
+  DELETED_IDS: 'obsidian_vault_deleted_ids_v1',
 };
 
 // Safe storage wrapper that handles sandboxed iframe environments
@@ -52,12 +53,39 @@ export interface RecentlyViewedRecord {
   viewedAt: string;
 }
 
+export function getDeletedItemIds(): Set<string> {
+  try {
+    const raw = storage.getItem(KEYS.DELETED_IDS);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    return new Set<string>(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+export function markItemAsDeleted(id: string): void {
+  try {
+    const ids = getDeletedItemIds();
+    ids.add(id);
+    storage.setItem(KEYS.DELETED_IDS, JSON.stringify(Array.from(ids)));
+  } catch (e) {
+    console.warn('Failed to store deleted id:', e);
+  }
+}
+
 export function loadItems(): MediaItem[] {
   try {
     const raw = storage.getItem(KEYS.ITEMS);
-    if (!raw) return INITIAL_ITEMS;
+    const deleted = getDeletedItemIds();
+    if (raw === null) {
+      return INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
+    }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ITEMS;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((i) => !deleted.has(i.id));
+    }
+    return INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
   } catch (e) {
     console.error('Failed to load items from storage:', e);
     return INITIAL_ITEMS;

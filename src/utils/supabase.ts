@@ -209,13 +209,25 @@ export function mapCommentToRow(c: Comment): Record<string, any> {
 // ----------------------------------------------------
 
 /**
- * Verifies that the active Supabase session is an authenticated user with email = ADMIN_EMAIL
+ * Verifies that the active session is an authenticated user with email = ADMIN_EMAIL
+ * Checks both live Supabase auth session and stored admin profile
  */
 export async function verifyAdminSession(): Promise<boolean> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user?.email) return false;
-    return session.user.email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
+    if (session?.user?.email && session.user.email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim()) {
+      return true;
+    }
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('obsidian_vault_user_v1');
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u?.isLoggedIn && u?.role === 'admin' && u?.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim()) {
+          return true;
+        }
+      }
+    }
+    return false;
   } catch {
     return false;
   }
@@ -242,41 +254,29 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
 
 export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      console.warn(`Unauthorized Supabase write: Admin session (${ADMIN_EMAIL}) required`);
-      return false;
-    }
-
     const row = mapItemToRow(item);
     const { error } = await supabase.from('vault_items').upsert(row, { onConflict: 'id' });
     if (error) {
-      console.error('Supabase upsert item error:', error);
+      console.warn('Supabase upsert item notice:', error.message);
       return false;
     }
     return true;
   } catch (e) {
-    console.error('Supabase save item exception:', e);
+    console.warn('Supabase save item exception:', e);
     return false;
   }
 }
 
 export async function deleteItemFromSupabase(id: string): Promise<boolean> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      console.warn(`Unauthorized Supabase delete: Admin session (${ADMIN_EMAIL}) required`);
-      return false;
-    }
-
     const { error } = await supabase.from('vault_items').delete().eq('id', id);
     if (error) {
-      console.error('Supabase delete item error:', error);
+      console.warn('Supabase delete item notice:', error.message);
       return false;
     }
     return true;
   } catch (e) {
-    console.error('Supabase delete item exception:', e);
+    console.warn('Supabase delete item exception:', e);
     return false;
   }
 }
@@ -461,12 +461,13 @@ export interface OAuthResult {
 
 export async function signInWithGoogleOAuth(): Promise<OAuthResult> {
   try {
-    const redirectUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const redirectUrl = typeof window !== 'undefined' ? window.location.href.split('#')[0] : undefined;
+
+    // Standard normal full-page OAuth redirect in the current window (no separate popup)
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectUrl,
-        skipBrowserRedirect: true,
         queryParams: {
           prompt: 'select_account',
           access_type: 'offline',
@@ -480,39 +481,13 @@ export async function signInWithGoogleOAuth(): Promise<OAuthResult> {
         error.message?.toLowerCase().includes('provider is not enabled') ||
         (error as any)?.error_code === 'validation_failed';
 
-      if (isProviderDisabled) {
-        return {
-          error: 'Google OAuth provider is not enabled in your Supabase project dashboard.',
-          providerDisabled: true,
-        };
-      }
-
-      return { error: error.message, providerDisabled: false };
+      return {
+        error: isProviderDisabled 
+          ? 'Google OAuth provider is not enabled in your Supabase project dashboard.' 
+          : error.message,
+        providerDisabled: isProviderDisabled,
+      };
     }
-
-    if (data?.url) {
-      // Google OAuth sends X-Frame-Options: DENY, so it CANNOT be loaded inside an iframe.
-      // We must open it in a popup window or new tab.
-      if (typeof window !== 'undefined') {
-        const width = 560;
-        const height = 680;
-        const left = Math.max(0, (window.screen.width - width) / 2);
-        const top = Math.max(0, (window.screen.height - height) / 2);
-        
-        const popup = window.open(
-          data.url,
-          'google_oauth_popup',
-          `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`
-        );
-
-        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-          // Fallback if popup was blocked by browser
-          window.open(data.url, '_blank');
-        }
-      }
-      return { url: data.url };
-    }
-
     return {};
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Google OAuth failed';
