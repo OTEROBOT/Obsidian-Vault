@@ -73,6 +73,7 @@ import { RecentlyViewedDrawer } from './components/RecentlyViewedDrawer';
 import { AuthModal } from './components/AuthModal';
 import { MobileDrawer } from './components/MobileDrawer';
 import { BottomNavBar } from './components/BottomNavBar';
+import { HeroBanner } from './components/HeroBanner';
 import { useTranslation } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 
@@ -636,6 +637,45 @@ export default function App() {
     saveConfigToSupabase(newConfig).catch(() => {});
   };
 
+  const handleUpdateSlidePosition = (slideId: string, posX: number, posY: number, scale?: number) => {
+    const currentSlides = config.bannerSlides && config.bannerSlides.length > 0
+      ? config.bannerSlides
+      : [
+          {
+            id: 'slide-1',
+            imageUrl: config.bannerBgUrl || 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80',
+            title: config.bannerTitle || config.vaultName || 'OBSIDIAN VAULT',
+            subtitle: config.bannerSubtitle || config.vaultTagline || '',
+            badge: config.bannerBadge || 'คลังไซเบอร์ความเร็วสูง',
+            positionX: 50,
+            positionY: 50,
+            scale: 1.0,
+            fitMode: 'cover',
+            overlayOpacity: config.bannerOverlayOpacity ?? 0.70,
+          },
+        ];
+
+    const updatedSlides = currentSlides.map((s) =>
+      s.id === slideId ? { ...s, positionX: posX, positionY: posY, ...(scale ? { scale } : {}) } : s
+    );
+
+    const updatedConfig: SystemConfig = {
+      ...config,
+      bannerSlides: updatedSlides,
+      ...(updatedSlides[0]?.id === slideId
+        ? {
+            bannerBgUrl: updatedSlides[0].imageUrl,
+            bannerTitle: updatedSlides[0].title,
+            bannerSubtitle: updatedSlides[0].subtitle,
+            bannerBadge: updatedSlides[0].badge,
+          }
+        : {}),
+    };
+
+    handleSaveConfig(updatedConfig);
+    showToast('บันทึกตำแหน่งจัดวางภาพเรียบร้อยแล้ว (Slide Position Saved)');
+  };
+
   const handleResetSampleData = () => {
     if (window.confirm('Reset all vault links, categories and comments to initial defaults?')) {
       resetAllData();
@@ -722,62 +762,18 @@ export default function App() {
       {/* Main Container Area - Responsive for Mobile, Tablet, Laptop, Desktop, and Smart TVs */}
       <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20 md:pb-8">
         
-        {/* Top Hero Banner Strip */}
+        {/* Top Hero Banner Slider with Free Mouse Drag Repositioning & Smooth Transitions */}
         {config.showBanner !== false && (
-          <div 
-            className="relative rounded-2xl sm:rounded-3xl glass-panel p-5 sm:p-8 overflow-hidden border border-cyan-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all duration-300 bg-cover bg-center"
-            style={config.bannerBgUrl ? { backgroundImage: `url(${config.bannerBgUrl})` } : undefined}
-          >
-            {/* Dark gradient overlay for optimal legibility */}
-            <div 
-              className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
-              style={{
-                backgroundColor: '#090a0f',
-                opacity: config.bannerBgUrl ? (config.bannerOverlayOpacity ?? 0.75) : 0.85,
-              }}
-            />
-            <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
-            <div className="absolute -left-16 -bottom-16 w-64 h-64 rounded-full bg-purple-500/15 blur-3xl pointer-events-none" />
-
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
-              <div className="space-y-1.5 sm:space-y-2 max-w-2xl">
-                <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs uppercase tracking-widest">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>{config.bannerBadge || t.hero.badge}</span>
-                </div>
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold font-display tracking-wide text-slate-100 drop-shadow-md">
-                  {config.bannerTitle || config.vaultName || t.common.appName}
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed drop-shadow-sm">
-                  {config.bannerSubtitle || config.vaultTagline || t.hero.subtitle}
-                </p>
-              </div>
-
-              {/* Quick Admin Actions (Visible exclusively to verified Admin) */}
-              {isRealAdmin && (
-                <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
-                  <button
-                    onClick={() => setIsAdminOpen(true)}
-                    className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-100 border border-white/20 hover:border-cyan-500/40 backdrop-blur-md transition-all shadow-md touch-target"
-                  >
-                    <Database className="w-4 h-4 text-cyan-400" />
-                    <span>{t.nav.admin}</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setEditingItem(null);
-                      setIsAddEditOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 transition-all shadow-lg shadow-cyan-500/20 touch-target"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>{t.nav.addLink}</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <HeroBanner
+            config={config}
+            isRealAdmin={isRealAdmin}
+            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenAddLink={() => {
+              setEditingItem(null);
+              setIsAddEditOpen(true);
+            }}
+            onUpdateSlidePosition={handleUpdateSlidePosition}
+          />
         )}
 
         {/* Multi-Filters & Taxonomy Bar */}

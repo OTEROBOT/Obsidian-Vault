@@ -41,6 +41,7 @@ import {
 } from '../utils/supabase';
 import { POSTGRES_SCHEMA_SQL } from '../data/supabaseSchema';
 import { safeConfirm } from '../utils/storage';
+import { BannerSlideEditor } from './BannerSlideEditor';
 
 interface AdminDashboardProps {
   isOpen: boolean;
@@ -1079,204 +1080,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 )}
               </div>
 
-              {/* SECTION 2: HERO BANNER CUSTOMIZER (แบนเนอร์หัวเว็บที่วงสีแดง) */}
+              {/* SECTION 2: HERO BANNER & SLIDES CUSTOMIZER (จัดการสไลด์และจัดวางภาพอิสระ) */}
               <div className="rounded-2xl glass-panel-subtle p-6 border border-white/10 space-y-5">
-                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div className="border-b border-white/10 pb-4">
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
                       <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-100 font-display">
-                        2. Hero Banner Customizer (แบนเนอร์หัวเว็บขนาดใหญ่)
+                        2. Hero Banner Slider & Free-Drag Positioning (ระบบสไลด์และจัดตำแหน่งภาพอิสระ)
                       </h4>
                       <p className="text-xs text-slate-400">
-                        ตำแหน่ง: แถบแบนเนอร์แนะนำด้านบนสุดของหน้าเว็บ (แสดงหัวข้อ, คำโปรย, และภาพพื้นหลัง)
-                      </p>
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={showBannerInput}
-                      onChange={(e) => setShowBannerInput(e.target.checked)}
-                      className="w-4 h-4 rounded bg-slate-900 border-white/20 text-cyan-500"
-                    />
-                    <span>เปิดแสดงแบนเนอร์</span>
-                  </label>
-                </div>
-
-                {/* Live Real-Time Banner Preview */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
-                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>ตัวอย่างแบนเนอร์ที่จะแสดงบนหน้าเว็บ (Live Preview):</span>
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-mono">Real-time dynamic rendering</span>
-                  </div>
-
-                  <div 
-                    className="relative rounded-2xl p-6 overflow-hidden border border-cyan-500/30 shadow-2xl transition-all duration-300 bg-cover bg-center"
-                    style={bannerBgUrlInput ? { backgroundImage: `url(${bannerBgUrlInput})` } : { backgroundColor: '#090a0f' }}
-                  >
-                    {/* Dark gradient overlay */}
-                    <div 
-                      className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
-                      style={{
-                        backgroundColor: '#090a0f',
-                        opacity: bannerBgUrlInput ? bannerOverlayOpacityInput : 0.85,
-                      }}
-                    />
-                    <div className="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-cyan-500/15 blur-2xl pointer-events-none" />
-
-                    <div className="relative z-10 space-y-2 max-w-xl">
-                      <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs uppercase tracking-widest">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>{bannerBadgeInput || 'VERIFIED VAULT REPOSITORY'}</span>
-                      </div>
-                      <h3 className="text-xl sm:text-2xl font-bold font-display tracking-wide text-slate-100 drop-shadow-md">
-                        {bannerTitleInput || 'OBSIDIAN VAULT'}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed drop-shadow-sm">
-                        {bannerSubtitleInput || 'ศูนย์รวมคลังข้อมูล มัลติมีเดีย และเว็บแอปพลิเคชันความเร็วสูง'}
+                        เพิ่มภาพได้ไม่จำกัด, ลากเมาส์เลื่อนตำแหน่งภาพอิสระ, ปรับโหมด Cover/Contain และตั้งเวลาสไลด์อัตโนมัติ
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Banner Controls */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Upload banner image */}
-                  <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
-                    <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>อัปโหลดภาพพื้นหลังแบนเนอร์</span>
-                    </span>
-                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/20 hover:border-cyan-500/50 rounded-xl p-4 cursor-pointer bg-white/[0.02] hover:bg-white/[0.04] transition-all">
-                      <Upload className="w-6 h-6 text-slate-400 mb-1" />
-                      <span className="text-xs text-slate-300 font-medium">
-                        {uploadingBanner ? 'กำลังอัปโหลด...' : 'คลิกเลือกไฟล์ภาพพื้นหลัง (ความละเอียดสูง แนวนอน)'}
-                      </span>
-                      <span className="text-[10px] text-slate-500 mt-0.5">แนะนำขนาด 1920x600px หรืออัตราส่วน 16:9</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        disabled={uploadingBanner}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleUploadImage(file, 'banner');
-                        }}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
-                  {/* Direct Banner URL */}
-                  <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
-                    <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                      <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>หรือใส่ลิงก์ภาพแบนเนอร์ (Direct Image URL)</span>
-                    </span>
-                    <input
-                      type="url"
-                      placeholder="https://images.unsplash.com/..."
-                      value={bannerBgUrlInput}
-                      onChange={(e) => setBannerBgUrlInput(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder-slate-500"
-                    />
-
-                    {/* Overlay Opacity Slider */}
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span className="flex items-center gap-1.5">
-                          <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>ระดับความมืดของพื้นหลัง (Darkness Overlay):</span>
-                        </span>
-                        <span className="font-mono text-cyan-300 font-semibold">
-                          {Math.round(bannerOverlayOpacityInput * 100)}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.10"
-                        max="0.95"
-                        step="0.05"
-                        value={bannerOverlayOpacityInput}
-                        onChange={(e) => setBannerOverlayOpacityInput(parseFloat(e.target.value))}
-                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Banner Presets */}
-                <div className="space-y-2">
-                  <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <Palette className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>หรือเลือกพื้นหลังแบนเนอร์ไซเบอร์สำเร็จรูป (Banner Presets):</span>
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                    {BANNER_PRESETS.map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setBannerBgUrlInput(preset.url)}
-                        className={`group relative rounded-xl overflow-hidden h-14 border text-left transition-all ${
-                          bannerBgUrlInput === preset.url
-                            ? 'border-cyan-400 ring-2 ring-cyan-500/30'
-                            : 'border-white/10 hover:border-white/30'
-                        }`}
-                      >
-                        <img 
-                          src={preset.url} 
-                          alt={preset.name} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
-                        />
-                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-1 text-center">
-                          <span className="text-[10px] font-semibold text-slate-200 line-clamp-2 leading-tight">
-                            {preset.name}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Banner Texts Customization */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-300">ข้อความป้ายกำกับ (Badge)</label>
-                    <input
-                      type="text"
-                      placeholder="คลังไซเบอร์ความเร็วสูง"
-                      value={bannerBadgeInput}
-                      onChange={(e) => setBannerBadgeInput(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-300">หัวข้อหลักแบนเนอร์ (Title)</label>
-                    <input
-                      type="text"
-                      placeholder="OBSIDIAN VAULT"
-                      value={bannerTitleInput}
-                      onChange={(e) => setBannerTitleInput(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-300">คำโปรยแบนเนอร์ (Subtitle)</label>
-                    <input
-                      type="text"
-                      placeholder="ศูนย์รวมคลังข้อมูล มัลติมีเดีย..."
-                      value={bannerSubtitleInput}
-                      onChange={(e) => setBannerSubtitleInput(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 mt-1"
-                    />
-                  </div>
-                </div>
+                <BannerSlideEditor 
+                  config={config} 
+                  onSaveConfig={onSaveConfig} 
+                />
               </div>
 
               {/* Bottom Action Save Bar */}

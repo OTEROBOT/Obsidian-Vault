@@ -92,6 +92,21 @@ export interface ScrapedMetadata {
   fallback?: boolean;
 }
 
+export interface BannerSlide {
+  id: string;
+  imageUrl: string;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  linkUrl?: string;
+  // Position & Scale
+  positionX?: number; // 0 to 100% (default 50)
+  positionY?: number; // 0 to 100% (default 50)
+  scale?: number;     // 0.3 to 2.5 (default 1.0)
+  fitMode?: 'cover' | 'contain' | 'custom';
+  overlayOpacity?: number; // 0 to 0.95
+}
+
 export interface SystemConfig {
   vaultName: string;
   vaultTagline: string;
@@ -107,4 +122,11 @@ export interface SystemConfig {
   bannerBadge?: string;
   bannerOverlayOpacity?: number; // 0.1 to 0.95
   showBanner?: boolean;
+  // Advanced Banner Slider & Repositioning System
+  bannerSlides?: BannerSlide[];
+  bannerAutoSlide?: boolean;
+  bannerSlideInterval?: number; // In seconds (default: 5)
+  bannerHeight?: 'compact' | 'standard' | 'tall' | 'cinematic'; // compact: 180px, standard: 240px, tall: 320px
+  bannerTransitionEffect?: 'slide' | 'fade';
 }
+
