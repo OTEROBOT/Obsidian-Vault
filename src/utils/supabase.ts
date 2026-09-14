@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { Category, Comment, MediaItem, Tag, UserProfile } from '../types';
+import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
 
 // Supabase configuration with default fallbacks to provided project
 export const SUPABASE_URL =
@@ -341,6 +341,73 @@ export async function saveTagToSupabase(tag: Tag): Promise<boolean> {
     }
 
     const { error } = await supabase.from('vault_tags').upsert(tag, { onConflict: 'id' });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteTagFromSupabase(id: string): Promise<boolean> {
+  try {
+    const isAdmin = await verifyAdminSession();
+    if (!isAdmin) {
+      console.warn('Unauthorized Supabase delete: Admin session required');
+      return false;
+    }
+
+    const { error } = await supabase.from('vault_tags').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchConfigFromSupabase(): Promise<Partial<SystemConfig> | null> {
+  try {
+    const { data, error } = await supabase.from('vault_config').select('*').limit(1).maybeSingle();
+    if (error || !data) return null;
+    return {
+      vaultName: data.vault_name || undefined,
+      vaultTagline: data.vault_tagline || undefined,
+      allowGuestComments: typeof data.allow_guest_comments === 'boolean' ? data.allow_guest_comments : undefined,
+      logoUrl: data.logo_url || undefined,
+      faviconUrl: data.favicon_url || undefined,
+      bannerBgUrl: data.banner_bg_url || undefined,
+      bannerTitle: data.banner_title || undefined,
+      bannerSubtitle: data.banner_subtitle || undefined,
+      bannerBadge: data.banner_badge || undefined,
+      bannerOverlayOpacity: typeof data.banner_overlay_opacity === 'number' ? data.banner_overlay_opacity : undefined,
+      showBanner: typeof data.show_banner === 'boolean' ? data.show_banner : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function saveConfigToSupabase(cfg: SystemConfig): Promise<boolean> {
+  try {
+    const isAdmin = await verifyAdminSession();
+    if (!isAdmin) {
+      return false;
+    }
+
+    const row = {
+      id: 'default',
+      vault_name: cfg.vaultName || '',
+      vault_tagline: cfg.vaultTagline || '',
+      allow_guest_comments: cfg.allowGuestComments ?? true,
+      logo_url: cfg.logoUrl || '',
+      favicon_url: cfg.faviconUrl || '',
+      banner_bg_url: cfg.bannerBgUrl || '',
+      banner_title: cfg.bannerTitle || '',
+      banner_subtitle: cfg.bannerSubtitle || '',
+      banner_badge: cfg.bannerBadge || '',
+      banner_overlay_opacity: cfg.bannerOverlayOpacity ?? 0.75,
+      show_banner: cfg.showBanner !== false,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('vault_config').upsert(row, { onConflict: 'id' });
     return !error;
   } catch {
     return false;

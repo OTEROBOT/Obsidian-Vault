@@ -70,13 +70,31 @@ CREATE TABLE IF NOT EXISTS public.vault_comments (
   likes INT DEFAULT 0
 );
 
--- 5. Enable Row Level Security (RLS)
+-- 5. Create System & Visual Config Table
+CREATE TABLE IF NOT EXISTS public.vault_config (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  vault_name TEXT DEFAULT 'Obsidian Vault',
+  vault_tagline TEXT DEFAULT 'Ultra-fast, luxury cyber-dark link and media repository',
+  allow_guest_comments BOOLEAN DEFAULT true,
+  logo_url TEXT DEFAULT '',
+  favicon_url TEXT DEFAULT '',
+  banner_bg_url TEXT DEFAULT '',
+  banner_title TEXT DEFAULT 'OBSIDIAN VAULT',
+  banner_subtitle TEXT DEFAULT 'Ultra-fast, luxury cyber-dark link and media repository',
+  banner_badge TEXT DEFAULT 'คลังไซเบอร์ความเร็วสูง',
+  banner_overlay_opacity NUMERIC DEFAULT 0.75,
+  show_banner BOOLEAN DEFAULT true,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 6. Enable Row Level Security (RLS)
 ALTER TABLE public.vault_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vault_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vault_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vault_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vault_config ENABLE ROW LEVEL SECURITY;
 
--- 6. Setup RLS Policies (Allow Read for everyone; Write restricted to verified Admin)
+-- 7. Setup RLS Policies (Allow Read for everyone; Write restricted to verified Admin)
 CREATE OR REPLACE FUNCTION public.is_vault_admin()
 RETURNS boolean AS $$
 BEGIN
@@ -96,6 +114,12 @@ CREATE POLICY "Public Read Tags" ON public.vault_tags FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Admin Write Tags" ON public.vault_tags;
 DROP POLICY IF EXISTS "Public Write Tags" ON public.vault_tags;
 CREATE POLICY "Admin Write Tags" ON public.vault_tags FOR ALL 
+  USING (public.is_vault_admin()) WITH CHECK (public.is_vault_admin());
+
+DROP POLICY IF EXISTS "Public Read Config" ON public.vault_config;
+CREATE POLICY "Public Read Config" ON public.vault_config FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admin Write Config" ON public.vault_config;
+CREATE POLICY "Admin Write Config" ON public.vault_config FOR ALL 
   USING (public.is_vault_admin()) WITH CHECK (public.is_vault_admin());
 
 DROP POLICY IF EXISTS "Public Read Items" ON public.vault_items;

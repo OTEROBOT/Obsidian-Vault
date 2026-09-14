@@ -38,13 +38,25 @@ import {
   saveTags, 
   saveUser,
   getDeletedItemIds,
-  markItemAsDeleted
+  markItemAsDeleted,
+  getDeletedCategoryIds,
+  markCategoryAsDeleted,
+  getDeletedTagIds,
+  markTagAsDeleted
 } from './utils/storage';
 import { 
   supabase, 
   fetchItemsFromSupabase, 
   saveItemToSupabase, 
   deleteItemFromSupabase, 
+  fetchCategoriesFromSupabase,
+  saveCategoryToSupabase,
+  deleteCategoryFromSupabase,
+  fetchTagsFromSupabase,
+  saveTagToSupabase,
+  deleteTagFromSupabase,
+  fetchConfigFromSupabase,
+  saveConfigToSupabase,
   mapSupabaseUserToProfile,
   signOutSupabaseAuth,
   ADMIN_EMAIL
@@ -206,6 +218,103 @@ export default function App() {
       authListener?.subscription.unsubscribe();
     };
   }, [t]);
+
+  // Dynamically update browser tab favicon and title from config
+  useEffect(() => {
+    const iconUrl = config.faviconUrl || config.logoUrl;
+    if (iconUrl) {
+      let link = document.getElementById('app-favicon') as HTMLLinkElement;
+      if (!link) {
+        link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      }
+      if (link) {
+        link.href = iconUrl;
+      }
+    }
+    if (config.vaultName) {
+      document.title = config.vaultName;
+    }
+  }, [config.faviconUrl, config.logoUrl, config.vaultName]);
+
+  // Hydrate categories, tags, and config from Supabase cloud database
+  useEffect(() => {
+    // 1. Categories sync
+    fetchCategoriesFromSupabase()
+      .then((remoteCats) => {
+        if (remoteCats && remoteCats.length > 0) {
+          const deletedCats = getDeletedCategoryIds();
+          const validRemote = remoteCats.filter((c) => !deletedCats.has(c.id));
+
+          deletedCats.forEach((delId) => {
+            if (remoteCats.some((c) => c.id === delId)) {
+              deleteCategoryFromSupabase(delId).catch(() => {});
+            }
+          });
+
+          setCategories((currentCats) => {
+            const validLocal = currentCats.filter((c) => !deletedCats.has(c.id));
+            const remoteMap = new Map(validRemote.map((r) => [r.id, r]));
+            const localOnly = validLocal.filter((c) => !remoteMap.has(c.id));
+
+            if (localOnly.length > 0) {
+              localOnly.forEach((cat) => {
+                saveCategoryToSupabase(cat).catch(() => {});
+              });
+            }
+
+            const merged = [...validRemote, ...localOnly];
+            saveCategories(merged);
+            return merged;
+          });
+        }
+      })
+      .catch((err) => console.warn('Categories sync warning:', err));
+
+    // 2. Tags sync
+    fetchTagsFromSupabase()
+      .then((remoteTags) => {
+        if (remoteTags && remoteTags.length > 0) {
+          const deletedTags = getDeletedTagIds();
+          const validRemote = remoteTags.filter((t) => !deletedTags.has(t.id));
+
+          deletedTags.forEach((delId) => {
+            if (remoteTags.some((t) => t.id === delId)) {
+              deleteTagFromSupabase(delId).catch(() => {});
+            }
+          });
+
+          setTags((currentTags) => {
+            const validLocal = currentTags.filter((t) => !deletedTags.has(t.id));
+            const remoteMap = new Map(validRemote.map((r) => [r.id, r]));
+            const localOnly = validLocal.filter((t) => !remoteMap.has(t.id));
+
+            if (localOnly.length > 0) {
+              localOnly.forEach((tag) => {
+                saveTagToSupabase(tag).catch(() => {});
+              });
+            }
+
+            const merged = [...validRemote, ...localOnly];
+            saveTags(merged);
+            return merged;
+          });
+        }
+      })
+      .catch((err) => console.warn('Tags sync warning:', err));
+
+    // 3. Visual & System Config sync
+    fetchConfigFromSupabase()
+      .then((remoteCfg) => {
+        if (remoteCfg) {
+          setConfig((currentCfg) => {
+            const merged = { ...currentCfg, ...remoteCfg };
+            saveConfig(merged);
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Filtered & Fuzzy Searched Items Memo
   const filteredItems = useMemo(() => {
@@ -467,6 +576,15 @@ export default function App() {
     setCategories(updated);
     saveCategories(updated);
     showToast(`Category "${newCategory.name}" created`);
+    saveCategoryToSupabase(newCategory).catch(() => {});
+  };
+
+  const handleUpdateCategory = (cat: Category) => {
+    const updated = categories.map((c) => (c.id === cat.id ? cat : c));
+    setCategories(updated);
+    saveCategories(updated);
+    showToast(`Category "${cat.name}" updated`);
+    saveCategoryToSupabase(cat).catch(() => {});
   };
 
   const handleDeleteCategory = (catId: string) => {
@@ -474,10 +592,12 @@ export default function App() {
       showToast('Default category cannot be removed');
       return;
     }
+    markCategoryAsDeleted(catId);
     const updated = categories.filter((c) => c.id !== catId);
     setCategories(updated);
     saveCategories(updated);
     showToast('Category deleted');
+    deleteCategoryFromSupabase(catId).catch(() => {});
   };
 
   const handleAddTag = (tagData: Omit<Tag, 'id'>) => {
@@ -489,19 +609,31 @@ export default function App() {
     setTags(updated);
     saveTags(updated);
     showToast(`Tag #${newTag.name} created`);
+    saveTagToSupabase(newTag).catch(() => {});
+  };
+
+  const handleUpdateTag = (tag: Tag) => {
+    const updated = tags.map((t) => (t.id === tag.id ? tag : t));
+    setTags(updated);
+    saveTags(updated);
+    showToast(`Tag #${tag.name} updated`);
+    saveTagToSupabase(tag).catch(() => {});
   };
 
   const handleDeleteTag = (tagId: string) => {
+    markTagAsDeleted(tagId);
     const updated = tags.filter((t) => t.id !== tagId);
     setTags(updated);
     saveTags(updated);
     showToast('Tag deleted');
+    deleteTagFromSupabase(tagId).catch(() => {});
   };
 
   const handleSaveConfig = (newConfig: SystemConfig) => {
     setConfig(newConfig);
     saveConfig(newConfig);
     showToast('Vault configuration updated');
+    saveConfigToSupabase(newConfig).catch(() => {});
   };
 
   const handleResetSampleData = () => {
@@ -583,6 +715,7 @@ export default function App() {
         searchQuery={filters.query}
         onSearchChange={(q) => setFilters({ ...filters, query: q })}
         vaultName={config.vaultName}
+        logoUrl={config.logoUrl}
         onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
       />
 
@@ -590,49 +723,62 @@ export default function App() {
       <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20 md:pb-8">
         
         {/* Top Hero Banner Strip */}
-        <div className="relative rounded-2xl sm:rounded-3xl glass-panel p-5 sm:p-8 overflow-hidden border border-cyan-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
-          <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
-          <div className="absolute -left-16 -bottom-16 w-64 h-64 rounded-full bg-purple-500/10 blur-3xl pointer-events-none" />
+        {config.showBanner !== false && (
+          <div 
+            className="relative rounded-2xl sm:rounded-3xl glass-panel p-5 sm:p-8 overflow-hidden border border-cyan-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all duration-300 bg-cover bg-center"
+            style={config.bannerBgUrl ? { backgroundImage: `url(${config.bannerBgUrl})` } : undefined}
+          >
+            {/* Dark gradient overlay for optimal legibility */}
+            <div 
+              className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
+              style={{
+                backgroundColor: '#090a0f',
+                opacity: config.bannerBgUrl ? (config.bannerOverlayOpacity ?? 0.75) : 0.85,
+              }}
+            />
+            <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
+            <div className="absolute -left-16 -bottom-16 w-64 h-64 rounded-full bg-purple-500/15 blur-3xl pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
-            <div className="space-y-1.5 sm:space-y-2 max-w-2xl">
-              <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs uppercase tracking-widest">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{t.hero.badge}</span>
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+              <div className="space-y-1.5 sm:space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs uppercase tracking-widest">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{config.bannerBadge || t.hero.badge}</span>
+                </div>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold font-display tracking-wide text-slate-100 drop-shadow-md">
+                  {config.bannerTitle || config.vaultName || t.common.appName}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed drop-shadow-sm">
+                  {config.bannerSubtitle || config.vaultTagline || t.hero.subtitle}
+                </p>
               </div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold font-display tracking-wide text-slate-100">
-                {config.vaultName || t.common.appName}
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                {config.vaultTagline || t.hero.subtitle}
-              </p>
+
+              {/* Quick Admin Actions (Visible exclusively to verified Admin) */}
+              {isRealAdmin && (
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+                  <button
+                    onClick={() => setIsAdminOpen(true)}
+                    className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-100 border border-white/20 hover:border-cyan-500/40 backdrop-blur-md transition-all shadow-md touch-target"
+                  >
+                    <Database className="w-4 h-4 text-cyan-400" />
+                    <span>{t.nav.admin}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setEditingItem(null);
+                      setIsAddEditOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 transition-all shadow-lg shadow-cyan-500/20 touch-target"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{t.nav.addLink}</span>
+                  </button>
+                </div>
+              )}
             </div>
-
-            {/* Quick Admin Actions (Visible exclusively to verified Admin) */}
-            {isRealAdmin && (
-              <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
-                <button
-                  onClick={() => setIsAdminOpen(true)}
-                  className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 hover:border-cyan-500/30 transition-all shadow-md touch-target"
-                >
-                  <Database className="w-4 h-4 text-cyan-400" />
-                  <span>{t.nav.admin}</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setEditingItem(null);
-                    setIsAddEditOpen(true);
-                  }}
-                  className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 transition-all shadow-lg shadow-cyan-500/20 touch-target"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{t.nav.addLink}</span>
-                </button>
-              </div>
-            )}
           </div>
-        </div>
+        )}
 
         {/* Multi-Filters & Taxonomy Bar */}
         <FilterBar
@@ -850,8 +996,10 @@ export default function App() {
           onDeleteLink={handleDeleteItem}
           onTogglePin={handleTogglePin}
           onAddCategory={handleAddCategory}
+          onUpdateCategory={handleUpdateCategory}
           onDeleteCategory={handleDeleteCategory}
           onAddTag={handleAddTag}
+          onUpdateTag={handleUpdateTag}
           onDeleteTag={handleDeleteTag}
           onDeleteComment={handleDeleteComment}
           onResetSampleData={handleResetSampleData}

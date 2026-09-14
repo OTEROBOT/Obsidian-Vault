@@ -98,4 +98,13 @@ export interface SystemConfig {
   allowGuestComments: boolean;
   defaultViewMode: 'grid' | 'compact';
   autoScrapeOpenGraph: boolean;
+  // Visual Branding Customizations
+  logoUrl?: string;
+  faviconUrl?: string;
+  bannerBgUrl?: string;
+  bannerTitle?: string;
+  bannerSubtitle?: string;
+  bannerBadge?: string;
+  bannerOverlayOpacity?: number; // 0.1 to 0.95
+  showBanner?: boolean;
 }

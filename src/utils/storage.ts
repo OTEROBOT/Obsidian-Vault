@@ -11,6 +11,10 @@ const KEYS = {
   RECENTLY_VIEWED: 'obsidian_vault_recent_v1',
   CONFIG: 'obsidian_vault_config_v1',
   DELETED_IDS: 'obsidian_vault_deleted_ids_v1',
+  DELETED_CATEGORY_IDS: 'obsidian_vault_deleted_cat_ids_v1',
+  DELETED_TAG_IDS: 'obsidian_vault_deleted_tag_ids_v1',
+  CUSTOM_CATEGORIES: 'obsidian_vault_custom_cats_v1',
+  CUSTOM_TAGS: 'obsidian_vault_custom_tags_v1',
 };
 
 // Safe storage wrapper that handles sandboxed iframe environments
@@ -100,12 +104,79 @@ export function saveItems(items: MediaItem[]): void {
   }
 }
 
+export function getDeletedCategoryIds(): Set<string> {
+  try {
+    const raw = storage.getItem(KEYS.DELETED_CATEGORY_IDS);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    return new Set<string>(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+export function markCategoryAsDeleted(id: string): void {
+  try {
+    const ids = getDeletedCategoryIds();
+    ids.add(id);
+    storage.setItem(KEYS.DELETED_CATEGORY_IDS, JSON.stringify(Array.from(ids)));
+  } catch (e) {
+    console.warn('Failed to store deleted category id:', e);
+  }
+}
+
+export function getDeletedTagIds(): Set<string> {
+  try {
+    const raw = storage.getItem(KEYS.DELETED_TAG_IDS);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    return new Set<string>(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+export function markTagAsDeleted(id: string): void {
+  try {
+    const ids = getDeletedTagIds();
+    ids.add(id);
+    storage.setItem(KEYS.DELETED_TAG_IDS, JSON.stringify(Array.from(ids)));
+  } catch (e) {
+    console.warn('Failed to store deleted tag id:', e);
+  }
+}
+
 export function loadCategories(): Category[] {
   try {
     const raw = storage.getItem(KEYS.CATEGORIES);
-    if (!raw) return INITIAL_CATEGORIES;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CATEGORIES;
+    const deleted = getDeletedCategoryIds();
+
+    // Check backup of custom categories
+    let customCats: Category[] = [];
+    try {
+      const customRaw = storage.getItem(KEYS.CUSTOM_CATEGORIES);
+      if (customRaw) {
+        customCats = JSON.parse(customRaw);
+      }
+    } catch {}
+
+    let list: Category[] = INITIAL_CATEGORIES;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        list = parsed;
+      }
+    }
+
+    // Ensure custom categories are preserved even if main key was refreshed
+    const existingIds = new Set(list.map((c) => c.id));
+    for (const cc of customCats) {
+      if (!existingIds.has(cc.id) && !deleted.has(cc.id)) {
+        list.push(cc);
+      }
+    }
+
+    return list.filter((c) => !deleted.has(c.id));
   } catch (e) {
     return INITIAL_CATEGORIES;
   }
@@ -114,6 +185,9 @@ export function loadCategories(): Category[] {
 export function saveCategories(categories: Category[]): void {
   try {
     storage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
+    const initialIds = new Set(INITIAL_CATEGORIES.map((c) => c.id));
+    const custom = categories.filter((c) => !initialIds.has(c.id));
+    storage.setItem(KEYS.CUSTOM_CATEGORIES, JSON.stringify(custom));
   } catch (e) {
     console.error('Failed to save categories:', e);
   }
@@ -122,9 +196,32 @@ export function saveCategories(categories: Category[]): void {
 export function loadTags(): Tag[] {
   try {
     const raw = storage.getItem(KEYS.TAGS);
-    if (!raw) return INITIAL_TAGS;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_TAGS;
+    const deleted = getDeletedTagIds();
+
+    let customTags: Tag[] = [];
+    try {
+      const customRaw = storage.getItem(KEYS.CUSTOM_TAGS);
+      if (customRaw) {
+        customTags = JSON.parse(customRaw);
+      }
+    } catch {}
+
+    let list: Tag[] = INITIAL_TAGS;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        list = parsed;
+      }
+    }
+
+    const existingIds = new Set(list.map((t) => t.id));
+    for (const ct of customTags) {
+      if (!existingIds.has(ct.id) && !deleted.has(ct.id)) {
+        list.push(ct);
+      }
+    }
+
+    return list.filter((t) => !deleted.has(t.id));
   } catch (e) {
     return INITIAL_TAGS;
   }
@@ -133,6 +230,9 @@ export function loadTags(): Tag[] {
 export function saveTags(tags: Tag[]): void {
   try {
     storage.setItem(KEYS.TAGS, JSON.stringify(tags));
+    const initialIds = new Set(INITIAL_TAGS.map((t) => t.id));
+    const custom = tags.filter((t) => !initialIds.has(t.id));
+    storage.setItem(KEYS.CUSTOM_TAGS, JSON.stringify(custom));
   } catch (e) {
     console.error('Failed to save tags:', e);
   }

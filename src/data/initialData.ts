@@ -222,6 +222,14 @@ export const DEFAULT_CONFIG: SystemConfig = {
   allowGuestComments: true,
   defaultViewMode: 'grid',
   autoScrapeOpenGraph: true,
+  logoUrl: '',
+  faviconUrl: '',
+  bannerBgUrl: '',
+  bannerTitle: 'OBSIDIAN VAULT',
+  bannerSubtitle: 'Ultra-fast, luxury cyber-dark link and media repository',
+  bannerBadge: 'คลังไซเบอร์ความเร็วสูง',
+  bannerOverlayOpacity: 0.75,
+  showBanner: true,
 };
 
 export const INITIAL_USER: UserProfile = {

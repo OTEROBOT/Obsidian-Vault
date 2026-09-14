@@ -21,12 +21,20 @@ import {
   Download, 
   RefreshCw,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Image as ImageIcon,
+  Upload,
+  Sparkles,
+  Sliders,
+  RotateCcw,
+  CheckCircle2,
+  Palette
 } from 'lucide-react';
 import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
 import { 
   checkSupabaseHealth, 
   syncLocalDataToSupabase, 
+  uploadMediaToSupabaseStorage,
   SUPABASE_URL, 
   ADMIN_EMAIL, 
   STORAGE_BUCKET 
@@ -49,8 +57,10 @@ interface AdminDashboardProps {
   onDeleteLink: (itemId: string) => void;
   onTogglePin: (itemId: string) => void;
   onAddCategory: (category: Omit<Category, 'id'>) => void;
+  onUpdateCategory?: (category: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
   onAddTag: (tag: Omit<Tag, 'id'>) => void;
+  onUpdateTag?: (tag: Tag) => void;
   onDeleteTag: (tagId: string) => void;
   onDeleteComment: (commentId: string) => void;
   onResetSampleData: () => void;
@@ -71,13 +81,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteLink,
   onTogglePin,
   onAddCategory,
+  onUpdateCategory,
   onDeleteCategory,
   onAddTag,
+  onUpdateTag,
   onDeleteTag,
   onDeleteComment,
   onResetSampleData,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'links' | 'taxonomies' | 'comments' | 'config' | 'schema'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'links' | 'taxonomies' | 'visuals' | 'comments' | 'config' | 'schema'>('overview');
   const [copiedSql, setCopiedSql] = useState(false);
 
   // Supabase Cloud State
@@ -155,11 +167,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setSyncMessage(null), 6000);
   };
 
+  // Presets for fast visual customization
+  const LOGO_PRESETS = [
+    {
+      name: 'Cyber Compass (Default)',
+      url: '',
+      preview: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%2322d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3Cpolygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/%3E%3C/svg%3E',
+    },
+    {
+      name: 'Quantum Core',
+      url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&h=300&q=80',
+      preview: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&h=300&q=80',
+    },
+    {
+      name: 'Neon Cyber Glyph',
+      url: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=300&h=300&q=80',
+      preview: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=300&h=300&q=80',
+    },
+    {
+      name: 'Synthwave Orb',
+      url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=300&h=300&q=80',
+      preview: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=300&h=300&q=80',
+    },
+  ];
+
+  const BANNER_PRESETS = [
+    {
+      name: 'Cyber Matrix Grid',
+      url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Neo-Tokyo Cyberpunk',
+      url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Deep Quantum Flow',
+      url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Synthwave Horizon',
+      url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Dark Carbon Texture',
+      url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1600&q=80',
+    },
+  ];
+
+  // Visual Branding State
+  const [logoUrlInput, setLogoUrlInput] = useState(config.logoUrl || '');
+  const [faviconUrlInput, setFaviconUrlInput] = useState(config.faviconUrl || '');
+  const [bannerBgUrlInput, setBannerBgUrlInput] = useState(config.bannerBgUrl || '');
+  const [bannerTitleInput, setBannerTitleInput] = useState(config.bannerTitle || config.vaultName || '');
+  const [bannerSubtitleInput, setBannerSubtitleInput] = useState(config.bannerSubtitle || config.vaultTagline || '');
+  const [bannerBadgeInput, setBannerBadgeInput] = useState(config.bannerBadge || 'คลังไซเบอร์ความเร็วสูง');
+  const [bannerOverlayOpacityInput, setBannerOverlayOpacityInput] = useState(config.bannerOverlayOpacity ?? 0.75);
+  const [showBannerInput, setShowBannerInput] = useState(config.showBanner !== false);
+  const [syncFaviconWithLogo, setSyncFaviconWithLogo] = useState(true);
+
+  // Upload loading states
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+
   // New Category State
   const [newCatName, setNewCatName] = useState('');
   const [newCatSlug, setNewCatSlug] = useState('');
   const [newCatColor, setNewCatColor] = useState('#22d3ee');
   const [newCatIcon, setNewCatIcon] = useState('Compass');
+
+  // Taxonomy Edit State
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
 
   // New Tag State
   const [newTagName, setNewTagName] = useState('');
@@ -170,6 +249,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [vaultTaglineInput, setVaultTaglineInput] = useState(config.vaultTagline);
   const [allowGuestComments, setAllowGuestComments] = useState(config.allowGuestComments);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+
+  // Handle uploading image files (Supabase Storage with automatic Data URL fallback)
+  const handleUploadImage = async (file: File, target: 'logo' | 'banner' | 'favicon') => {
+    if (!file) return;
+    if (target === 'logo') setUploadingLogo(true);
+    if (target === 'banner') setUploadingBanner(true);
+    if (target === 'favicon') setUploadingFavicon(true);
+
+    try {
+      const res = await uploadMediaToSupabaseStorage(file, 'branding');
+      if (res && res.url) {
+        if (target === 'logo') {
+          setLogoUrlInput(res.url);
+          if (syncFaviconWithLogo) setFaviconUrlInput(res.url);
+        } else if (target === 'banner') {
+          setBannerBgUrlInput(res.url);
+        } else if (target === 'favicon') {
+          setFaviconUrlInput(res.url);
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Storage upload error, falling back to data URL:', e);
+    } finally {
+      if (target === 'logo') setUploadingLogo(false);
+      if (target === 'banner') setUploadingBanner(false);
+      if (target === 'favicon') setUploadingFavicon(false);
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      if (target === 'logo') {
+        setLogoUrlInput(dataUrl);
+        if (syncFaviconWithLogo) setFaviconUrlInput(dataUrl);
+      } else if (target === 'banner') {
+        setBannerBgUrlInput(dataUrl);
+      } else if (target === 'favicon') {
+        setFaviconUrlInput(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveVisuals = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const updatedCfg: SystemConfig = {
+      ...config,
+      logoUrl: logoUrlInput.trim(),
+      faviconUrl: (syncFaviconWithLogo ? logoUrlInput.trim() : faviconUrlInput.trim()) || logoUrlInput.trim(),
+      bannerBgUrl: bannerBgUrlInput.trim(),
+      bannerTitle: bannerTitleInput.trim() || 'OBSIDIAN VAULT',
+      bannerSubtitle: bannerSubtitleInput.trim(),
+      bannerBadge: bannerBadgeInput.trim(),
+      bannerOverlayOpacity: Number(bannerOverlayOpacityInput),
+      showBanner: showBannerInput,
+    };
+    onSaveConfig(updatedCfg);
+    setSaveNotice('บันทึกรูปภาพและแบนเนอร์เรียบร้อยแล้ว (Saved Visuals Successfully)!');
+    setTimeout(() => setSaveNotice(null), 4000);
+  };
 
   if (!isOpen) return null;
 
@@ -283,7 +423,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {[
             { id: 'overview', label: 'Metrics', icon: <Layers className="w-4 h-4" /> },
             { id: 'links', label: 'Manage Links', icon: <FileText className="w-4 h-4" /> },
-            { id: 'taxonomies', label: 'Categories & Tags', icon: <FolderPlus className="w-4 h-4" /> },
+            { id: 'taxonomies', label: 'Categories & Tags (หมวดหมู่ & แท็ก)', icon: <FolderPlus className="w-4 h-4" /> },
+            { id: 'visuals', label: 'Visuals & Banners (รูปภาพ & แบนเนอร์)', icon: <Sparkles className="w-4 h-4 text-cyan-400" /> },
             { id: 'comments', label: 'Comments', icon: <MessageSquare className="w-4 h-4" /> },
             { id: 'config', label: 'System Config', icon: <Settings className="w-4 h-4" /> },
             { id: 'schema', label: 'Supabase Cloud & SQL', icon: <Database className="w-4 h-4 text-cyan-400" /> },
@@ -497,136 +638,681 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {/* TAB 3: CATEGORIES & TAGS (CRUD) */}
+          {/* TAB 3: CATEGORIES & TAGS (CRUD with In-line Edit & Permanent Persistence) */}
           {activeTab === 'taxonomies' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Category CRUD */}
-              <div className="rounded-2xl glass-panel-subtle p-5 border border-white/10 space-y-4">
-                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                  <FolderPlus className="w-4 h-4 text-cyan-400" />
-                  <span>Category Management</span>
-                </h3>
+            <div className="space-y-6">
+              <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-xs text-slate-300 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FolderPlus className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>
+                    หมวดหมู่และแท็กทั้งหมดจะถูกบันทึกลงในฐานข้อมูลอย่างถาวร (Local Storage + Supabase) จะไม่หายเมื่อปิดเปิดหน้าเว็บใหม่
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-cyan-400 font-semibold px-2.5 py-1 rounded bg-black/40">
+                  {categories.length} Categories | {tags.length} Tags
+                </span>
+              </div>
 
-                {/* Add Category Form */}
-                <form onSubmit={handleCreateCategory} className="space-y-3 p-3 rounded-xl bg-black/40 border border-white/5">
-                  <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Category CRUD */}
+                <div className="rounded-2xl glass-panel-subtle p-5 border border-white/10 space-y-4">
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FolderPlus className="w-4 h-4 text-cyan-400" />
+                      <span>Category Management (จัดการหมวดหมู่)</span>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400">Total: {categories.length}</span>
+                  </h3>
+
+                  {/* Add Category Form */}
+                  <form onSubmit={handleCreateCategory} className="space-y-3 p-3 rounded-xl bg-black/40 border border-white/5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Category Name"
+                        value={newCatName}
+                        onChange={(e) => setNewCatName(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg text-xs glass-input text-slate-100 placeholder-slate-500"
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Slug (optional)"
+                        value={newCatSlug}
+                        onChange={(e) => setNewCatSlug(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg text-xs glass-input text-slate-100 placeholder-slate-500"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-400">Color:</span>
+                        <input
+                          type="color"
+                          value={newCatColor}
+                          onChange={(e) => setNewCatColor(e.target.value)}
+                          className="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 shadow transition-all"
+                      >
+                        + Add Category
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Edit Category Inline Modal / Box */}
+                  {editingCategory && (
+                    <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/40 space-y-3 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-cyan-300">แก้ไขหมวดหมู่: {editingCategory.name}</span>
+                        <button 
+                          onClick={() => setEditingCategory(null)} 
+                          className="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded hover:bg-white/10"
+                        >
+                          ยกเลิก
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400">ชื่อหมวดหมู่</label>
+                          <input
+                            type="text"
+                            value={editingCategory.name}
+                            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                            className="w-full px-2.5 py-1.5 rounded-lg text-xs glass-input text-slate-100 mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400">Slug</label>
+                          <input
+                            type="text"
+                            value={editingCategory.slug}
+                            onChange={(e) => setEditingCategory({ ...editingCategory, slug: e.target.value })}
+                            className="w-full px-2.5 py-1.5 rounded-lg text-xs glass-input text-slate-100 mt-1"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400">สีประจำหมวดหมู่:</span>
+                          <input
+                            type="color"
+                            value={editingCategory.color}
+                            onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                            className="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingCategory.name.trim() && onUpdateCategory) {
+                              onUpdateCategory(editingCategory);
+                              setSaveNotice(`อัปเดตหมวดหมู่ "${editingCategory.name}" เรียบร้อยแล้ว!`);
+                              setTimeout(() => setSaveNotice(null), 3000);
+                              setEditingCategory(null);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all"
+                        >
+                          บันทึกการแก้ไข
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Category List */}
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {categories.map((cat) => (
+                      <div
+                        key={cat.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                          <span className="text-xs font-medium text-slate-200">{cat.name}</span>
+                          <span className="text-[10px] font-mono text-slate-500">/{cat.slug}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {cat.id !== 'cat-all' && (
+                            <>
+                              <button
+                                onClick={() => setEditingCategory(cat)}
+                                className="text-slate-400 hover:text-cyan-400 p-1.5 rounded-lg hover:bg-cyan-500/10 transition-colors"
+                                title="Edit category"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (safeConfirm(`ต้องการลบหมวดหมู่ "${cat.name}" อย่างถาวรหรือไม่?`)) {
+                                    onDeleteCategory(cat.id);
+                                  }
+                                }}
+                                className="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
+                                title="Delete category"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tags CRUD */}
+                <div className="rounded-2xl glass-panel-subtle p-5 border border-white/10 space-y-4">
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TagIcon className="w-4 h-4 text-cyan-400" />
+                      <span>Tags Management (จัดการแท็ก)</span>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400">Total: {tags.length}</span>
+                  </h3>
+
+                  {/* Add Tag Form */}
+                  <form onSubmit={handleCreateTag} className="flex gap-2 p-3 rounded-xl bg-black/40 border border-white/5">
                     <input
                       type="text"
-                      placeholder="Category Name"
-                      value={newCatName}
-                      onChange={(e) => setNewCatName(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg text-xs glass-input text-slate-100 placeholder-slate-500"
+                      placeholder="New Tag Name"
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      className="flex-1 px-3 py-1.5 rounded-lg text-xs glass-input text-slate-100 placeholder-slate-500"
                       required
                     />
                     <input
-                      type="text"
-                      placeholder="Slug (optional)"
-                      value={newCatSlug}
-                      onChange={(e) => setNewCatSlug(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg text-xs glass-input text-slate-100 placeholder-slate-500"
+                      type="color"
+                      value={newTagColor}
+                      onChange={(e) => setNewTagColor(e.target.value)}
+                      className="w-8 h-8 rounded cursor-pointer bg-transparent border-0 self-center"
                     />
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-400">Color:</span>
-                      <input
-                        type="color"
-                        value={newCatColor}
-                        onChange={(e) => setNewCatColor(e.target.value)}
-                        className="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
-                      />
-                    </div>
                     <button
                       type="submit"
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 shadow transition-all"
                     >
-                      Add Category
+                      + Add Tag
                     </button>
-                  </div>
-                </form>
+                  </form>
 
-                {/* Category List */}
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {categories.map((cat) => (
-                    <div
-                      key={cat.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                        <span className="text-xs font-medium text-slate-200">{cat.name}</span>
-                        <span className="text-[10px] font-mono text-slate-500">/{cat.slug}</span>
-                      </div>
-                      {cat.id !== 'cat-all' && (
-                        <button
-                          onClick={() => onDeleteCategory(cat.id)}
-                          className="text-slate-500 hover:text-rose-400 p-1"
-                          title="Delete category"
+                  {/* Edit Tag Inline Modal / Box */}
+                  {editingTag && (
+                    <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/40 space-y-3 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-cyan-300">แก้ไขแท็ก: #{editingTag.name}</span>
+                        <button 
+                          onClick={() => setEditingTag(null)} 
+                          className="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded hover:bg-white/10"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          ยกเลิก
                         </button>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingTag.name}
+                          onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value.replace(/^#/, '') })}
+                          className="flex-1 px-3 py-1.5 rounded-lg text-xs glass-input text-slate-100"
+                          placeholder="Tag Name"
+                        />
+                        <input
+                          type="color"
+                          value={editingTag.color}
+                          onChange={(e) => setEditingTag({ ...editingTag, color: e.target.value })}
+                          className="w-8 h-8 rounded cursor-pointer bg-transparent border-0 self-center"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingTag.name.trim() && onUpdateTag) {
+                              onUpdateTag(editingTag);
+                              setSaveNotice(`อัปเดตแท็ก "#${editingTag.name}" เรียบร้อยแล้ว!`);
+                              setTimeout(() => setSaveNotice(null), 3000);
+                              setEditingTag(null);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all"
+                        >
+                          บันทึก
+                        </button>
+                      </div>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Tags Grid */}
+                  <div className="flex flex-wrap gap-2 max-h-72 overflow-y-auto pr-1">
+                    {tags.map((t) => (
+                      <div
+                        key={t.id}
+                        className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 transition-colors"
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                        <span>#{t.name}</span>
+                        <button
+                          onClick={() => setEditingTag(t)}
+                          className="text-slate-500 hover:text-cyan-400 ml-1 p-0.5"
+                          title="Edit tag"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (safeConfirm(`ต้องการลบแท็ก "#${t.name}" อย่างถาวรหรือไม่?`)) {
+                              onDeleteTag(t.id);
+                            }
+                          }}
+                          className="text-slate-500 hover:text-rose-400 p-0.5"
+                          title="Delete tag"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: VISUALS & IMAGES (ปรับแต่งรูปภาพ, โลโก้ และแบนเนอร์หัวเว็บ) */}
+          {activeTab === 'visuals' && (
+            <div className="space-y-6">
+              
+              {/* Information Banner */}
+              <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-300">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-cyan-300 text-sm">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <span>Visual Identity & Banner Customizer (ปรับแต่งรูปภาพและแบนเนอร์)</span>
+                  </div>
+                  <p className="text-slate-400 text-xs">
+                    อัปโหลดรูปภาพ ปรับเปลี่ยนโลโก้ ไอคอนแท็บ (Favicon) และแบนเนอร์ส่วนหัว พร้อมแสดงผลตัวอย่างสดทันที
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveVisuals}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 shadow-lg shadow-cyan-500/20 shrink-0 transition-all font-display"
+                >
+                  💾 บันทึกรูปภาพทั้งหมด
+                </button>
+              </div>
+
+              {/* SECTION 1: LOGO & FAVICON CUSTOMIZER */}
+              <div className="rounded-2xl glass-panel-subtle p-6 border border-white/10 space-y-5">
+                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                      <ImageIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-100 font-display">
+                        1. Logo & Browser Favicon (โลโก้ & ไอคอนแท็บเบราว์เซอร์)
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        ตำแหน่ง: มุมบนซ้ายแถบนำทาง (Navbar) และไอคอนบนแท็บเบราว์เซอร์
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Current Active Preview */}
+                  <div className="flex items-center gap-3 bg-black/40 px-3 py-1.5 rounded-xl border border-white/10">
+                    <span className="text-[11px] text-slate-400">ตัวอย่างปัจจุบัน:</span>
+                    {logoUrlInput ? (
+                      <img 
+                        src={logoUrlInput} 
+                        alt="Logo Preview" 
+                        className="w-7 h-7 rounded-lg object-contain bg-slate-900 border border-white/20 p-0.5" 
+                      />
+                    ) : (
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-600 to-teal-500 flex items-center justify-center text-slate-950 font-bold text-xs">
+                        OV
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Option A: Upload from computer */}
+                  <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>อัปโหลดไฟล์รูปภาพโลโก้</span>
+                    </span>
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/20 hover:border-cyan-500/50 rounded-xl p-4 cursor-pointer bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                      <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                      <span className="text-xs text-slate-300 font-medium">
+                        {uploadingLogo ? 'กำลังอัปโหลด...' : 'คลิกเลือกไฟล์รูปภาพ (PNG, JPG, SVG, WebP)'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 mt-0.5">แนะนำขนาด 200x200px ขึ้นไป</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingLogo}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadImage(file, 'logo');
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Option B: Direct URL */}
+                  <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                      <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>หรือใส่ลิงก์รูปภาพ (Direct Image URL)</span>
+                    </span>
+                    <input
+                      type="url"
+                      placeholder="https://example.com/logo.png"
+                      value={logoUrlInput}
+                      onChange={(e) => {
+                        setLogoUrlInput(e.target.value);
+                        if (syncFaviconWithLogo) setFaviconUrlInput(e.target.value);
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder-slate-500"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={syncFaviconWithLogo}
+                          onChange={(e) => setSyncFaviconWithLogo(e.target.checked)}
+                          className="w-4 h-4 rounded bg-slate-900 border-white/20 text-cyan-500"
+                        />
+                        <span>ใช้รูปเดียวกันเป็น Favicon (ไอคอนแท็บเบราว์เซอร์) โดยอัตโนมัติ</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Logo Presets */}
+                <div className="space-y-2">
+                  <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>หรือเลือกจากสไตล์พรีเซ็ตสำเร็จรูป (Cyber Presets):</span>
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {LOGO_PRESETS.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setLogoUrlInput(preset.url);
+                          if (syncFaviconWithLogo) setFaviconUrlInput(preset.url);
+                        }}
+                        className={`flex items-center gap-2 p-2 rounded-xl text-left border transition-all ${
+                          logoUrlInput === preset.url
+                            ? 'border-cyan-400 bg-cyan-500/10'
+                            : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <img 
+                          src={preset.preview} 
+                          alt={preset.name} 
+                          className="w-6 h-6 rounded object-cover bg-slate-900 border border-white/10" 
+                        />
+                        <span className="text-[11px] font-medium text-slate-200 truncate">{preset.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Separate Favicon URL (if unlinked) */}
+                {!syncFaviconWithLogo && (
+                  <div className="p-4 rounded-xl bg-black/40 border border-white/10 space-y-2">
+                    <label className="text-xs font-medium text-slate-300">Custom Favicon URL (เฉพาะไอคอนแท็บ)</label>
+                    <input
+                      type="url"
+                      placeholder="https://example.com/favicon.ico"
+                      value={faviconUrlInput}
+                      onChange={(e) => setFaviconUrlInput(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl text-xs glass-input text-slate-100 placeholder-slate-500"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 2: HERO BANNER CUSTOMIZER (แบนเนอร์หัวเว็บที่วงสีแดง) */}
+              <div className="rounded-2xl glass-panel-subtle p-6 border border-white/10 space-y-5">
+                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-100 font-display">
+                        2. Hero Banner Customizer (แบนเนอร์หัวเว็บขนาดใหญ่)
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        ตำแหน่ง: แถบแบนเนอร์แนะนำด้านบนสุดของหน้าเว็บ (แสดงหัวข้อ, คำโปรย, และภาพพื้นหลัง)
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={showBannerInput}
+                      onChange={(e) => setShowBannerInput(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-white/20 text-cyan-500"
+                    />
+                    <span>เปิดแสดงแบนเนอร์</span>
+                  </label>
+                </div>
+
+                {/* Live Real-Time Banner Preview */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>ตัวอย่างแบนเนอร์ที่จะแสดงบนหน้าเว็บ (Live Preview):</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">Real-time dynamic rendering</span>
+                  </div>
+
+                  <div 
+                    className="relative rounded-2xl p-6 overflow-hidden border border-cyan-500/30 shadow-2xl transition-all duration-300 bg-cover bg-center"
+                    style={bannerBgUrlInput ? { backgroundImage: `url(${bannerBgUrlInput})` } : { backgroundColor: '#090a0f' }}
+                  >
+                    {/* Dark gradient overlay */}
+                    <div 
+                      className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
+                      style={{
+                        backgroundColor: '#090a0f',
+                        opacity: bannerBgUrlInput ? bannerOverlayOpacityInput : 0.85,
+                      }}
+                    />
+                    <div className="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-cyan-500/15 blur-2xl pointer-events-none" />
+
+                    <div className="relative z-10 space-y-2 max-w-xl">
+                      <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs uppercase tracking-widest">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{bannerBadgeInput || 'VERIFIED VAULT REPOSITORY'}</span>
+                      </div>
+                      <h3 className="text-xl sm:text-2xl font-bold font-display tracking-wide text-slate-100 drop-shadow-md">
+                        {bannerTitleInput || 'OBSIDIAN VAULT'}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed drop-shadow-sm">
+                        {bannerSubtitleInput || 'ศูนย์รวมคลังข้อมูล มัลติมีเดีย และเว็บแอปพลิเคชันความเร็วสูง'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Banner Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Upload banner image */}
+                  <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>อัปโหลดภาพพื้นหลังแบนเนอร์</span>
+                    </span>
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/20 hover:border-cyan-500/50 rounded-xl p-4 cursor-pointer bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                      <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                      <span className="text-xs text-slate-300 font-medium">
+                        {uploadingBanner ? 'กำลังอัปโหลด...' : 'คลิกเลือกไฟล์ภาพพื้นหลัง (ความละเอียดสูง แนวนอน)'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 mt-0.5">แนะนำขนาด 1920x600px หรืออัตราส่วน 16:9</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingBanner}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadImage(file, 'banner');
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Direct Banner URL */}
+                  <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                      <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>หรือใส่ลิงก์ภาพแบนเนอร์ (Direct Image URL)</span>
+                    </span>
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={bannerBgUrlInput}
+                      onChange={(e) => setBannerBgUrlInput(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder-slate-500"
+                    />
+
+                    {/* Overlay Opacity Slider */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span className="flex items-center gap-1.5">
+                          <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>ระดับความมืดของพื้นหลัง (Darkness Overlay):</span>
+                        </span>
+                        <span className="font-mono text-cyan-300 font-semibold">
+                          {Math.round(bannerOverlayOpacityInput * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.10"
+                        max="0.95"
+                        step="0.05"
+                        value={bannerOverlayOpacityInput}
+                        onChange={(e) => setBannerOverlayOpacityInput(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Banner Presets */}
+                <div className="space-y-2">
+                  <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>หรือเลือกพื้นหลังแบนเนอร์ไซเบอร์สำเร็จรูป (Banner Presets):</span>
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                    {BANNER_PRESETS.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setBannerBgUrlInput(preset.url)}
+                        className={`group relative rounded-xl overflow-hidden h-14 border text-left transition-all ${
+                          bannerBgUrlInput === preset.url
+                            ? 'border-cyan-400 ring-2 ring-cyan-500/30'
+                            : 'border-white/10 hover:border-white/30'
+                        }`}
+                      >
+                        <img 
+                          src={preset.url} 
+                          alt={preset.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                        />
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-1 text-center">
+                          <span className="text-[10px] font-semibold text-slate-200 line-clamp-2 leading-tight">
+                            {preset.name}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Banner Texts Customization */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-300">ข้อความป้ายกำกับ (Badge)</label>
+                    <input
+                      type="text"
+                      placeholder="คลังไซเบอร์ความเร็วสูง"
+                      value={bannerBadgeInput}
+                      onChange={(e) => setBannerBadgeInput(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-300">หัวข้อหลักแบนเนอร์ (Title)</label>
+                    <input
+                      type="text"
+                      placeholder="OBSIDIAN VAULT"
+                      value={bannerTitleInput}
+                      onChange={(e) => setBannerTitleInput(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-300">คำโปรยแบนเนอร์ (Subtitle)</label>
+                    <input
+                      type="text"
+                      placeholder="ศูนย์รวมคลังข้อมูล มัลติมีเดีย..."
+                      value={bannerSubtitleInput}
+                      onChange={(e) => setBannerSubtitleInput(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 mt-1"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Tags CRUD */}
-              <div className="rounded-2xl glass-panel-subtle p-5 border border-white/10 space-y-4">
-                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                  <TagIcon className="w-4 h-4 text-cyan-400" />
-                  <span>Tags Management</span>
-                </h3>
+              {/* Bottom Action Save Bar */}
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-black/40 border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogoUrlInput('');
+                    setFaviconUrlInput('');
+                    setBannerBgUrlInput('');
+                    setBannerTitleInput('OBSIDIAN VAULT');
+                    setBannerSubtitleInput('');
+                    setBannerBadgeInput('คลังไซเบอร์ความเร็วสูง');
+                    setBannerOverlayOpacityInput(0.75);
+                    setShowBannerInput(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>รีเซ็ตเป็นค่าเริ่มต้น (Reset Defaults)</span>
+                </button>
 
-                {/* Add Tag Form */}
-                <form onSubmit={handleCreateTag} className="flex gap-2 p-3 rounded-xl bg-black/40 border border-white/5">
-                  <input
-                    type="text"
-                    placeholder="New Tag Name"
-                    value={newTagName}
-                    onChange={(e) => setNewTagName(e.target.value)}
-                    className="flex-1 px-3 py-1.5 rounded-lg text-xs glass-input text-slate-100 placeholder-slate-500"
-                    required
-                  />
-                  <input
-                    type="color"
-                    value={newTagColor}
-                    onChange={(e) => setNewTagColor(e.target.value)}
-                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0 self-center"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400"
-                  >
-                    Add Tag
-                  </button>
-                </form>
-
-                {/* Tags Grid */}
-                <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto">
-                  {tags.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono bg-white/[0.04] border border-white/10 text-slate-300"
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
-                      <span>#{t.name}</span>
-                      <button
-                        onClick={() => onDeleteTag(t.id)}
-                        className="text-slate-500 hover:text-rose-400 ml-1"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveVisuals}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 shadow-lg shadow-cyan-500/20 transition-all font-display"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>บันทึกการปรับแต่งรูปภาพและแบนเนอร์ (Save Visuals)</span>
+                </button>
               </div>
 
             </div>
           )}
 
-          {/* TAB 4: COMMENT MODERATION */}
+          {/* TAB 5: COMMENT MODERATION */}
           {activeTab === 'comments' && (
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-slate-200">

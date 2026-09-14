@@ -31,6 +31,7 @@ interface NavbarProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   vaultName: string;
+  logoUrl?: string;
   onOpenMobileMenu?: () => void;
 }
 
@@ -45,6 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   onSearchChange,
   vaultName,
+  logoUrl,
   onOpenMobileMenu,
 }) => {
   const { t, language, setLanguage, languages } = useTranslation();
@@ -99,9 +101,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => onSearchChange('')}
           title={t.common.appName}
         >
-          <div className="relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-slate-900 to-purple-600/20 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)] group-hover:border-cyan-400/60 transition-all duration-300">
-            <Compass className="w-5 h-5 text-cyan-400 group-hover:rotate-45 transition-transform duration-500" />
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+          <div className="relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-slate-900 to-purple-600/20 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)] group-hover:border-cyan-400/60 transition-all duration-300 overflow-hidden">
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={vaultName || 'Logo'}
+                className="w-full h-full object-cover rounded-xl"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <>
+                <Compass className="w-5 h-5 text-cyan-400 group-hover:rotate-45 transition-transform duration-500" />
+                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+              </>
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2">
