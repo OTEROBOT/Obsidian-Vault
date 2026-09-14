@@ -85,7 +85,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     <div className="w-full space-y-3 sm:space-y-4 py-2 sm:py-4">
       
       {/* Categories Horizontal Carousel */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div 
+        className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none w-full min-w-0"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {categories.map((cat) => {
           const isSelected = filters.categoryId === cat.id || (cat.id === 'cat-all' && (filters.categoryId === 'all' || filters.categoryId === 'cat-all'));
           const count = cat.id === 'cat-all' ? totalItemCount : (categoryCounts[cat.id] || 0);
@@ -95,7 +98,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <button
               key={cat.id}
               onClick={() => onFilterChange({ ...filters, categoryId: cat.id === 'cat-all' ? 'all' : cat.id })}
-              className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 border select-none touch-target ${
+              className={`flex shrink-0 min-w-fit items-center gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 border select-none touch-target ${
                 isSelected
                   ? 'bg-cyan-500/15 border-cyan-500/50 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
                   : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
@@ -119,14 +122,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 pt-2 border-t border-white/5">
         
         {/* Media Type Tabs */}
-        <div className="flex items-center bg-black/40 dark:bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto max-w-full">
+        <div 
+          className="flex items-center gap-1 bg-black/40 dark:bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto max-w-full scrollbar-none"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {mediaTypes.map((item) => {
             const isActive = filters.mediaType === item.type;
             return (
               <button
                 key={item.type}
                 onClick={() => onFilterChange({ ...filters, mediaType: item.type })}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all touch-target ${
+                className={`flex shrink-0 min-w-fit items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all touch-target ${
                   isActive
                     ? 'bg-white/15 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'

@@ -20,7 +20,7 @@ import {
   Check
 } from 'lucide-react';
 import { BannerSlide, SystemConfig } from '../types';
-import { uploadMediaToSupabaseStorage } from '../utils/supabase';
+import { uploadMediaToSupabaseStorage, compressImageToDataUrl } from '../utils/supabase';
 
 interface BannerSlideEditorProps {
   config: SystemConfig;
@@ -61,6 +61,7 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
   const [showBanner, setShowBanner] = useState(config.showBanner !== false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [previewDevice, setPreviewDevice] = useState<'pc' | 'ipad' | 'mobile'>('pc');
 
   // Active slide being edited
   const activeSlide = slides.find((s) => s.id === activeSlideId) || slides[0];
@@ -154,14 +155,24 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
       setUploadingId(null);
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      setSlides((prev) =>
-        prev.map((s) => (s.id === slideId ? { ...s, imageUrl: dataUrl } : s))
-      );
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await compressImageToDataUrl(file, 1600, 0.85);
+      if (dataUrl) {
+        setSlides((prev) =>
+          prev.map((s) => (s.id === slideId ? { ...s, imageUrl: dataUrl } : s))
+        );
+        return;
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setSlides((prev) =>
+          prev.map((s) => (s.id === slideId ? { ...s, imageUrl: dataUrl } : s))
+        );
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Drag canvas handlers
@@ -194,6 +205,36 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
   };
 
   const onMouseUpCanvas = () => {
+    isDraggingCanvasRef.current = false;
+  };
+
+  // Touch drag support for mobile / iPad
+  const onTouchStartCanvas = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 0 || !activeSlide) return;
+    isDraggingCanvasRef.current = true;
+    startDragCoord.current = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      initX: activeSlide.positionX ?? 50,
+      initY: activeSlide.positionY ?? 50,
+    };
+  };
+
+  const onTouchMoveCanvas = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDraggingCanvasRef.current || !activeSlide || e.touches.length === 0) return;
+    const deltaX = e.touches[0].clientX - startDragCoord.current.startX;
+    const deltaY = e.touches[0].clientY - startDragCoord.current.startY;
+    const currentScale = activeSlide.scale ?? 1.0;
+    const sensitivity = 0.20 / Math.max(0.5, currentScale);
+    const newX = Math.min(100, Math.max(0, startDragCoord.current.initX - deltaX * sensitivity));
+    const newY = Math.min(100, Math.max(0, startDragCoord.current.initY - deltaY * sensitivity));
+    updateActiveSlide({
+      positionX: Math.round(newX),
+      positionY: Math.round(newY),
+    });
+  };
+
+  const onTouchEndCanvas = () => {
     isDraggingCanvasRef.current = false;
   };
 
@@ -497,7 +538,7 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
         {/* Right Column (7 Cols): Interactive Drag-to-Position Canvas & Details */}
         {activeSlide && (
           <div className="lg:col-span-7 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                 <Move className="w-4 h-4 text-cyan-400" />
                 <span>พื้นที่จัดวางภาพด้วยเมาส์ลากอิสระ (Interactive Drag Canvas)</span>
@@ -517,15 +558,67 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
               </div>
             </div>
 
+            {/* Device Framing Simulator Tabs */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-black/60 border border-white/10 text-xs">
+              <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                <span>จำลองมุมมองอุปกรณ์:</span>
+              </span>
+              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('pc')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+                    previewDevice === 'pc'
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  💻 PC จอกว้าง (16:9)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('ipad')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+                    previewDevice === 'ipad'
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  📱 iPad / แท็บเล็ต (4:3)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('mobile')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+                    previewDevice === 'mobile'
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  📱 มือถือ
+                </button>
+              </div>
+            </div>
+
             {/* INTERACTIVE DRAG STAGE */}
-            <div className="space-y-2">
+            <div className="space-y-2 bg-slate-950/40 p-3 rounded-2xl border border-white/5 flex flex-col items-center">
               <div
                 ref={canvasRef}
                 onMouseDown={onMouseDownCanvas}
                 onMouseMove={onMouseMoveCanvas}
                 onMouseUp={onMouseUpCanvas}
+                onTouchStart={onTouchStartCanvas}
+                onTouchMove={onTouchMoveCanvas}
+                onTouchEnd={onTouchEndCanvas}
                 onClick={onClickCanvas}
-                className="relative w-full h-64 sm:h-72 rounded-2xl overflow-hidden border-2 border-cyan-500/50 cursor-grab active:cursor-grabbing shadow-2xl bg-black select-none group"
+                className={`relative rounded-2xl overflow-hidden border-2 border-cyan-500/50 cursor-grab active:cursor-grabbing shadow-2xl bg-black select-none group transition-all duration-300 ${
+                  previewDevice === 'ipad'
+                    ? 'w-full max-w-[540px] h-72 sm:h-80'
+                    : previewDevice === 'mobile'
+                    ? 'w-full max-w-[320px] h-72'
+                    : 'w-full h-64 sm:h-72'
+                }`}
               >
                 {/* Background Image Layer */}
                 {activeSlide.fitMode === 'contain' ? (
@@ -537,7 +630,7 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
                     <img
                       src={activeSlide.imageUrl}
                       alt={activeSlide.title || 'Slide'}
-                      className="w-full h-full object-contain relative z-10 transition-transform duration-75"
+                      className="w-full h-full object-contain relative z-10 transition-transform duration-75 pointer-events-none"
                       style={{
                         transform: `scale(${activeSlide.scale ?? 1})`,
                         objectPosition: `${activeSlide.positionX ?? 50}% ${activeSlide.positionY ?? 50}%`,
@@ -546,14 +639,15 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
                     />
                   </>
                 ) : (
-                  <div
-                    className="w-full h-full bg-cover transition-all duration-75"
+                  <img
+                    src={activeSlide.imageUrl}
+                    alt={activeSlide.title || 'Slide'}
+                    className="w-full h-full object-cover relative z-0 transition-transform duration-75 pointer-events-none"
                     style={{
-                      backgroundImage: `url(${activeSlide.imageUrl})`,
-                      backgroundPosition: `${activeSlide.positionX ?? 50}% ${activeSlide.positionY ?? 50}%`,
-                      backgroundSize: activeSlide.scale && activeSlide.scale !== 1 ? `${Math.round((activeSlide.scale) * 100)}%` : 'cover',
-                      backgroundRepeat: 'no-repeat',
+                      transform: (activeSlide.scale ?? 1) !== 1 ? `scale(${activeSlide.scale ?? 1})` : undefined,
+                      objectPosition: `${activeSlide.positionX ?? 50}% ${activeSlide.positionY ?? 50}%`,
                     }}
+                    draggable={false}
                   />
                 )}
 

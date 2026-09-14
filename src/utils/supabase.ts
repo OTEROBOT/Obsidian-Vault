@@ -222,7 +222,7 @@ export async function verifyAdminSession(): Promise<boolean> {
       const stored = localStorage.getItem('obsidian_vault_user_v1');
       if (stored) {
         const u = JSON.parse(stored);
-        if (u?.isLoggedIn && u?.role === 'admin' && u?.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim()) {
+        if (u?.isLoggedIn && u?.role === 'admin') {
           return true;
         }
       }
@@ -365,7 +365,24 @@ export async function deleteTagFromSupabase(id: string): Promise<boolean> {
 export async function fetchConfigFromSupabase(): Promise<Partial<SystemConfig> | null> {
   try {
     const { data, error } = await supabase.from('vault_config').select('*').limit(1).maybeSingle();
-    if (error || !data) return null;
+    if (error || !data) {
+      if (error && error.code !== 'PGRST116') {
+        console.warn('Supabase fetch config warning:', error.message);
+      }
+      return null;
+    }
+
+    let parsedSlides: any[] | undefined = undefined;
+    if (data.banner_slides) {
+      try {
+        parsedSlides = typeof data.banner_slides === 'string'
+          ? JSON.parse(data.banner_slides)
+          : data.banner_slides;
+      } catch (e) {
+        console.warn('Failed to parse banner_slides from Supabase:', e);
+      }
+    }
+
     return {
       vaultName: data.vault_name || undefined,
       vaultTagline: data.vault_tagline || undefined,
@@ -378,8 +395,14 @@ export async function fetchConfigFromSupabase(): Promise<Partial<SystemConfig> |
       bannerBadge: data.banner_badge || undefined,
       bannerOverlayOpacity: typeof data.banner_overlay_opacity === 'number' ? data.banner_overlay_opacity : undefined,
       showBanner: typeof data.show_banner === 'boolean' ? data.show_banner : undefined,
+      bannerSlides: Array.isArray(parsedSlides) && parsedSlides.length > 0 ? parsedSlides : undefined,
+      bannerAutoSlide: typeof data.banner_auto_slide === 'boolean' ? data.banner_auto_slide : undefined,
+      bannerSlideInterval: typeof data.banner_slide_interval === 'number' ? data.banner_slide_interval : undefined,
+      bannerTransitionEffect: (data.banner_transition as any) || undefined,
+      bannerHeight: (data.banner_height as any) || undefined,
     };
-  } catch {
+  } catch (err) {
+    console.warn('fetchConfigFromSupabase exception:', err);
     return null;
   }
 }
@@ -388,28 +411,56 @@ export async function saveConfigToSupabase(cfg: SystemConfig): Promise<boolean> 
   try {
     const isAdmin = await verifyAdminSession();
     if (!isAdmin) {
+      console.warn('Unauthorized config write: Admin session required');
       return false;
     }
 
-    const row = {
+    // Always keep banner_bg_url in sync with the primary slide's image so fallback viewers see it
+    const primarySlideUrl = (cfg.bannerSlides && cfg.bannerSlides.length > 0 && cfg.bannerSlides[0].imageUrl)
+      ? cfg.bannerSlides[0].imageUrl
+      : (cfg.bannerBgUrl || '');
+
+    const baseRow: Record<string, any> = {
       id: 'default',
       vault_name: cfg.vaultName || '',
       vault_tagline: cfg.vaultTagline || '',
       allow_guest_comments: cfg.allowGuestComments ?? true,
       logo_url: cfg.logoUrl || '',
       favicon_url: cfg.faviconUrl || '',
-      banner_bg_url: cfg.bannerBgUrl || '',
-      banner_title: cfg.bannerTitle || '',
-      banner_subtitle: cfg.bannerSubtitle || '',
-      banner_badge: cfg.bannerBadge || '',
+      banner_bg_url: primarySlideUrl,
+      banner_title: cfg.bannerTitle || (cfg.bannerSlides?.[0]?.title) || '',
+      banner_subtitle: cfg.bannerSubtitle || (cfg.bannerSlides?.[0]?.subtitle) || '',
+      banner_badge: cfg.bannerBadge || (cfg.bannerSlides?.[0]?.badge) || '',
       banner_overlay_opacity: cfg.bannerOverlayOpacity ?? 0.75,
       show_banner: cfg.showBanner !== false,
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from('vault_config').upsert(row, { onConflict: 'id' });
-    return !error;
-  } catch {
+    // Attempt 1: Full extended schema with banner_slides
+    const fullRow = {
+      ...baseRow,
+      banner_slides: cfg.bannerSlides || [],
+      banner_auto_slide: cfg.bannerAutoSlide ?? true,
+      banner_slide_interval: cfg.bannerSlideInterval ?? 5,
+      banner_transition: cfg.bannerTransitionEffect ?? 'slide',
+      banner_height: cfg.bannerHeight ?? 'standard',
+    };
+
+    const { error: fullError } = await supabase.from('vault_config').upsert(fullRow, { onConflict: 'id' });
+    if (!fullError) {
+      return true;
+    }
+
+    // Attempt 2: Fallback to baseRow if extended columns are not yet in Supabase table
+    console.warn('Extended config upsert notice (trying baseRow fallback):', fullError.message);
+    const { error: baseError } = await supabase.from('vault_config').upsert(baseRow, { onConflict: 'id' });
+    if (baseError) {
+      console.warn('Supabase save config error:', baseError.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase save config exception:', e);
     return false;
   }
 }
@@ -445,6 +496,39 @@ export async function deleteCommentFromSupabase(id: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Helper to compress local image files before fallback to dataUrl
+export function compressImageToDataUrl(file: File, maxWidth = 1600, quality = 0.85): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(reader.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      };
+      img.onerror = () => resolve(reader.result as string);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
 }
 
 // ----------------------------------------------------

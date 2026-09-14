@@ -134,7 +134,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Global Fast Search Bar (Desktop / Tablet) */}
-        <div className="hidden md:flex flex-1 max-w-xl 2xl:max-w-2xl mx-2 sm:mx-4">
+        <div className="hidden md:flex flex-1 min-w-[140px] max-w-md lg:max-w-xl 2xl:max-w-2xl mx-2 sm:mx-3 lg:mx-4">
           <div className="relative w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -143,7 +143,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={t.nav.searchPlaceholder}
-              className="w-full pl-10 pr-20 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm glass-input text-slate-100 placeholder-slate-500 focus:text-white"
+              className="w-full pl-10 pr-16 lg:pr-20 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm glass-input text-slate-100 placeholder-slate-500 focus:text-white"
             />
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searchQuery ? (
@@ -154,7 +154,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ESC
                 </button>
               ) : (
-                <span className="hidden lg:inline-block px-2 py-0.5 text-[10px] font-mono rounded bg-white/5 border border-white/10 text-slate-400">
+                <span className="hidden xl:inline-block px-2 py-0.5 text-[10px] font-mono rounded bg-white/5 border border-white/10 text-slate-400">
                   {t.nav.searchKbd}
                 </span>
               )}
@@ -163,7 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right Navigation & Action Buttons */}
-        <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3">
+        <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2.5 shrink-0">
           
           {/* Mobile Search Button (shows/hides quick input on small screens) */}
           <button
@@ -181,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setIsLangOpen(!isLangOpen);
                 setIsThemeOpen(false);
               }}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all active:scale-95"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 lg:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all active:scale-95"
               aria-label={t.nav.language}
               title={t.nav.language}
             >
@@ -321,10 +321,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {isRealAdmin && (
             <button
               onClick={onOpenAdmin}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+              title={t.nav.admin}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)]"
             >
               <Shield className="w-4 h-4 text-amber-400" />
-              <span className="hidden md:inline">{t.nav.admin}</span>
+              <span className="hidden lg:inline">{t.nav.admin}</span>
             </button>
           )}
 
@@ -332,10 +333,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {isRealAdmin && (
             <button
               onClick={onOpenAddLink}
-              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95"
+              title={t.nav.addLink}
+              className="hidden sm:flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden md:inline">{t.nav.addLink}</span>
+              <span className="hidden lg:inline">{t.nav.addLink}</span>
             </button>
           )}
 

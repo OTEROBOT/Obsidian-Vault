@@ -129,14 +129,14 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   const heightClass = React.useMemo(() => {
     switch (config.bannerHeight) {
       case 'compact':
-        return 'min-h-[160px] sm:min-h-[190px]';
+        return 'min-h-[170px] sm:min-h-[195px] md:min-h-[210px]';
       case 'tall':
-        return 'min-h-[280px] sm:min-h-[340px]';
+        return 'min-h-[290px] sm:min-h-[330px] md:min-h-[370px]';
       case 'cinematic':
-        return 'min-h-[340px] sm:min-h-[420px]';
+        return 'min-h-[350px] sm:min-h-[410px] md:min-h-[460px]';
       case 'standard':
       default:
-        return 'min-h-[210px] sm:min-h-[250px]';
+        return 'min-h-[225px] sm:min-h-[255px] md:min-h-[285px]';
     }
   }, [config.bannerHeight]);
 
@@ -284,7 +284,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 <img
                   src={activeSlide.imageUrl}
                   alt={activeSlide.title || 'Banner'}
-                  className="w-full h-full object-contain relative z-10 transition-transform duration-300"
+                  className="w-full h-full object-contain relative z-10 transition-transform duration-300 pointer-events-none"
                   style={{
                     transform: `scale(${isRepositioning ? dragScale : (activeSlide.scale ?? 1)})`,
                     objectPosition: `${isRepositioning ? dragPosX : (activeSlide.positionX ?? 50)}% ${isRepositioning ? dragPosY : (activeSlide.positionY ?? 50)}%`,
@@ -293,14 +293,17 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 />
               </>
             ) : (
-              <div 
-                className="w-full h-full bg-cover transition-all duration-150"
+              <img
+                src={activeSlide.imageUrl}
+                alt={activeSlide.title || 'Banner'}
+                className="w-full h-full object-cover relative z-0 transition-transform duration-150 pointer-events-none"
                 style={{
-                  backgroundImage: `url(${activeSlide.imageUrl})`,
-                  backgroundPosition: `${isRepositioning ? dragPosX : (activeSlide.positionX ?? 50)}% ${isRepositioning ? dragPosY : (activeSlide.positionY ?? 50)}%`,
-                  backgroundSize: activeSlide.scale && activeSlide.scale !== 1 ? `${Math.round((isRepositioning ? dragScale : activeSlide.scale) * 100)}%` : 'cover',
-                  backgroundRepeat: 'no-repeat',
+                  transform: (isRepositioning ? dragScale : (activeSlide.scale ?? 1)) !== 1
+                    ? `scale(${isRepositioning ? dragScale : (activeSlide.scale ?? 1)})`
+                    : undefined,
+                  objectPosition: `${isRepositioning ? dragPosX : (activeSlide.positionX ?? 50)}% ${isRepositioning ? dragPosY : (activeSlide.positionY ?? 50)}%`,
                 }}
+                draggable={false}
               />
             )}
 

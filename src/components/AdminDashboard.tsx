@@ -35,6 +35,7 @@ import {
   checkSupabaseHealth, 
   syncLocalDataToSupabase, 
   uploadMediaToSupabaseStorage,
+  compressImageToDataUrl,
   SUPABASE_URL, 
   ADMIN_EMAIL, 
   STORAGE_BUCKET 
@@ -279,19 +280,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (target === 'favicon') setUploadingFavicon(false);
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      if (target === 'logo') {
-        setLogoUrlInput(dataUrl);
-        if (syncFaviconWithLogo) setFaviconUrlInput(dataUrl);
-      } else if (target === 'banner') {
-        setBannerBgUrlInput(dataUrl);
-      } else if (target === 'favicon') {
-        setFaviconUrlInput(dataUrl);
+    try {
+      const dataUrl = await compressImageToDataUrl(file, 800, 0.85);
+      if (dataUrl) {
+        if (target === 'logo') {
+          setLogoUrlInput(dataUrl);
+          if (syncFaviconWithLogo) setFaviconUrlInput(dataUrl);
+        } else if (target === 'banner') {
+          setBannerBgUrlInput(dataUrl);
+        } else if (target === 'favicon') {
+          setFaviconUrlInput(dataUrl);
+        }
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        if (target === 'logo') {
+          setLogoUrlInput(dataUrl);
+          if (syncFaviconWithLogo) setFaviconUrlInput(dataUrl);
+        } else if (target === 'banner') {
+          setBannerBgUrlInput(dataUrl);
+        } else if (target === 'favicon') {
+          setFaviconUrlInput(dataUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSaveVisuals = (e?: React.FormEvent) => {
