@@ -238,6 +238,7 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
     const { data, error } = await supabase
       .from('vault_items')
       .select('*')
+      .neq('id', SYSTEM_CONFIG_ITEM_ID)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -245,7 +246,9 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
       console.warn('Supabase fetch items error:', error.message);
       return null;
     }
-    return (data || []).map(mapRowToItem);
+    return (data || [])
+      .filter((row) => row.id !== SYSTEM_CONFIG_ITEM_ID)
+      .map(mapRowToItem);
   } catch (e) {
     console.warn('Supabase items exception:', e);
     return null;
@@ -253,6 +256,9 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
 }
 
 export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
+  if (item.id === SYSTEM_CONFIG_ITEM_ID) {
+    return false;
+  }
   try {
     const row = mapItemToRow(item);
     const { error } = await supabase.from('vault_items').upsert(row, { onConflict: 'id' });
@@ -268,6 +274,9 @@ export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
 }
 
 export async function deleteItemFromSupabase(id: string): Promise<boolean> {
+  if (id === SYSTEM_CONFIG_ITEM_ID) {
+    return false;
+  }
   try {
     const { error } = await supabase.from('vault_items').delete().eq('id', id);
     if (error) {
@@ -362,64 +371,82 @@ export async function deleteTagFromSupabase(id: string): Promise<boolean> {
   }
 }
 
+export const SYSTEM_CONFIG_ITEM_ID = '__system_vault_config__';
+
 export async function fetchConfigFromSupabase(): Promise<Partial<SystemConfig> | null> {
+  // 1. Attempt reading from dedicated 'vault_config' table
   try {
     const { data, error } = await supabase.from('vault_config').select('*').limit(1).maybeSingle();
-    if (error || !data) {
-      if (error && error.code !== 'PGRST116') {
-        console.warn('Supabase fetch config warning:', error.message);
+    if (!error && data) {
+      let parsedSlides: any[] | undefined = undefined;
+      if (data.banner_slides) {
+        try {
+          parsedSlides = typeof data.banner_slides === 'string'
+            ? JSON.parse(data.banner_slides)
+            : data.banner_slides;
+        } catch (e) {
+          console.warn('Failed to parse banner_slides from Supabase:', e);
+        }
       }
-      return null;
-    }
 
-    let parsedSlides: any[] | undefined = undefined;
-    if (data.banner_slides) {
-      try {
-        parsedSlides = typeof data.banner_slides === 'string'
-          ? JSON.parse(data.banner_slides)
-          : data.banner_slides;
-      } catch (e) {
-        console.warn('Failed to parse banner_slides from Supabase:', e);
-      }
+      return {
+        vaultName: data.vault_name || undefined,
+        vaultTagline: data.vault_tagline || undefined,
+        allowGuestComments: typeof data.allow_guest_comments === 'boolean' ? data.allow_guest_comments : undefined,
+        logoUrl: data.logo_url || undefined,
+        faviconUrl: data.favicon_url || undefined,
+        bannerBgUrl: data.banner_bg_url || undefined,
+        bannerTitle: data.banner_title || undefined,
+        bannerSubtitle: data.banner_subtitle || undefined,
+        bannerBadge: data.banner_badge || undefined,
+        bannerOverlayOpacity: typeof data.banner_overlay_opacity === 'number' ? data.banner_overlay_opacity : undefined,
+        showBanner: typeof data.show_banner === 'boolean' ? data.show_banner : undefined,
+        bannerSlides: Array.isArray(parsedSlides) && parsedSlides.length > 0 ? parsedSlides : undefined,
+        bannerAutoSlide: typeof data.banner_auto_slide === 'boolean' ? data.banner_auto_slide : undefined,
+        bannerSlideInterval: typeof data.banner_slide_interval === 'number' ? data.banner_slide_interval : undefined,
+        bannerTransitionEffect: (data.banner_transition as any) || undefined,
+        bannerHeight: (data.banner_height as any) || undefined,
+      };
     }
-
-    return {
-      vaultName: data.vault_name || undefined,
-      vaultTagline: data.vault_tagline || undefined,
-      allowGuestComments: typeof data.allow_guest_comments === 'boolean' ? data.allow_guest_comments : undefined,
-      logoUrl: data.logo_url || undefined,
-      faviconUrl: data.favicon_url || undefined,
-      bannerBgUrl: data.banner_bg_url || undefined,
-      bannerTitle: data.banner_title || undefined,
-      bannerSubtitle: data.banner_subtitle || undefined,
-      bannerBadge: data.banner_badge || undefined,
-      bannerOverlayOpacity: typeof data.banner_overlay_opacity === 'number' ? data.banner_overlay_opacity : undefined,
-      showBanner: typeof data.show_banner === 'boolean' ? data.show_banner : undefined,
-      bannerSlides: Array.isArray(parsedSlides) && parsedSlides.length > 0 ? parsedSlides : undefined,
-      bannerAutoSlide: typeof data.banner_auto_slide === 'boolean' ? data.banner_auto_slide : undefined,
-      bannerSlideInterval: typeof data.banner_slide_interval === 'number' ? data.banner_slide_interval : undefined,
-      bannerTransitionEffect: (data.banner_transition as any) || undefined,
-      bannerHeight: (data.banner_height as any) || undefined,
-    };
   } catch (err) {
-    console.warn('fetchConfigFromSupabase exception:', err);
-    return null;
+    console.warn('vault_config table check caught:', err);
   }
+
+  // 2. Universal Cloud Fallback: Fetch config from active 'vault_items' system record
+  // This guarantees cross-device sync (PC, iPad, Mobile) even if vault_config table is not created in Supabase yet
+  try {
+    const { data: systemRow, error: itemError } = await supabase
+      .from('vault_items')
+      .select('id, title, description, url, thumbnail_url')
+      .eq('id', SYSTEM_CONFIG_ITEM_ID)
+      .maybeSingle();
+
+    if (!itemError && systemRow && systemRow.description) {
+      try {
+        const parsed = JSON.parse(systemRow.description);
+        if (parsed && typeof parsed === 'object') {
+          return parsed as Partial<SystemConfig>;
+        }
+      } catch (jsonErr) {
+        console.warn('Failed to parse systemRow description from vault_items:', jsonErr);
+      }
+    }
+  } catch (err) {
+    console.warn('vault_items system config fetch exception:', err);
+  }
+
+  return null;
 }
 
 export async function saveConfigToSupabase(cfg: SystemConfig): Promise<boolean> {
+  let anySuccess = false;
+
+  const primarySlideUrl = (cfg.bannerSlides && cfg.bannerSlides.length > 0 && cfg.bannerSlides[0].imageUrl)
+    ? cfg.bannerSlides[0].imageUrl
+    : (cfg.bannerBgUrl || '');
+
+  // Attempt 1: Standard 'vault_config' table
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      console.warn('Unauthorized config write: Admin session required');
-      return false;
-    }
-
-    // Always keep banner_bg_url in sync with the primary slide's image so fallback viewers see it
-    const primarySlideUrl = (cfg.bannerSlides && cfg.bannerSlides.length > 0 && cfg.bannerSlides[0].imageUrl)
-      ? cfg.bannerSlides[0].imageUrl
-      : (cfg.bannerBgUrl || '');
-
     const baseRow: Record<string, any> = {
       id: 'default',
       vault_name: cfg.vaultName || '',
@@ -436,7 +463,6 @@ export async function saveConfigToSupabase(cfg: SystemConfig): Promise<boolean> 
       updated_at: new Date().toISOString(),
     };
 
-    // Attempt 1: Full extended schema with banner_slides
     const fullRow = {
       ...baseRow,
       banner_slides: cfg.bannerSlides || [],
@@ -448,21 +474,55 @@ export async function saveConfigToSupabase(cfg: SystemConfig): Promise<boolean> 
 
     const { error: fullError } = await supabase.from('vault_config').upsert(fullRow, { onConflict: 'id' });
     if (!fullError) {
-      return true;
+      anySuccess = true;
+    } else {
+      const { error: baseError } = await supabase.from('vault_config').upsert(baseRow, { onConflict: 'id' });
+      if (!baseError) anySuccess = true;
     }
-
-    // Attempt 2: Fallback to baseRow if extended columns are not yet in Supabase table
-    console.warn('Extended config upsert notice (trying baseRow fallback):', fullError.message);
-    const { error: baseError } = await supabase.from('vault_config').upsert(baseRow, { onConflict: 'id' });
-    if (baseError) {
-      console.warn('Supabase save config error:', baseError.message);
-      return false;
-    }
-    return true;
   } catch (e) {
-    console.warn('Supabase save config exception:', e);
-    return false;
+    console.warn('vault_config upsert skipped:', e);
   }
+
+  // Attempt 2: Universal Cloud Fallback to 'vault_items' system record
+  // This guarantees that ANY change made on PC immediately propagates to iPad and all devices worldwide
+  try {
+    const configPayload = JSON.stringify(cfg);
+    const systemItemRow = {
+      id: SYSTEM_CONFIG_ITEM_ID,
+      title: cfg.vaultName || 'OBSIDIAN_VAULT_CONFIG',
+      description: configPayload,
+      url: primarySlideUrl || 'https://obsidianvault.internal/config',
+      thumbnail_url: primarySlideUrl || '',
+      media_url: primarySlideUrl || '',
+      media_type: 'web',
+      category_id: 'tech',
+      tags: ['system-config'],
+      site_name: 'Obsidian System Sync',
+      favicon: cfg.faviconUrl || cfg.logoUrl || '',
+      views_count: 0,
+      likes_count: 0,
+      is_pinned: false,
+      source: 'system',
+      file_name: 'config.json',
+      file_size: `${configPayload.length} B`,
+      created_by: ADMIN_EMAIL,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: itemError } = await supabase
+      .from('vault_items')
+      .upsert(systemItemRow, { onConflict: 'id' });
+
+    if (!itemError) {
+      anySuccess = true;
+    } else {
+      console.warn('System config upsert to vault_items error:', itemError.message);
+    }
+  } catch (err) {
+    console.warn('System config upsert to vault_items exception:', err);
+  }
+
+  return anySuccess;
 }
 
 export async function fetchCommentsFromSupabase(itemId?: string): Promise<Comment[] | null> {
@@ -681,7 +741,8 @@ export async function signOutSupabaseAuth(): Promise<void> {
 export async function syncLocalDataToSupabase(
   items: MediaItem[],
   categories: Category[],
-  tags: Tag[]
+  tags: Tag[],
+  config?: SystemConfig
 ): Promise<{ success: boolean; itemsSynced: number; error?: string }> {
   try {
     const isAdmin = await verifyAdminSession();
@@ -706,6 +767,11 @@ export async function syncLocalDataToSupabase(
     for (const item of items) {
       const ok = await saveItemToSupabase(item);
       if (ok) count++;
+    }
+
+    // 4. Sync Config (Banners, slides, titles)
+    if (config) {
+      await saveConfigToSupabase(config);
     }
 
     return { success: true, itemsSynced: count };

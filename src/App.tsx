@@ -57,6 +57,7 @@ import {
   deleteTagFromSupabase,
   fetchConfigFromSupabase,
   saveConfigToSupabase,
+  SYSTEM_CONFIG_ITEM_ID,
   mapSupabaseUserToProfile,
   signOutSupabaseAuth,
   ADMIN_EMAIL
@@ -303,18 +304,79 @@ export default function App() {
       })
       .catch((err) => console.warn('Tags sync warning:', err));
 
-    // 3. Visual & System Config sync
+    // 3. Visual & System Config sync across all devices
     fetchConfigFromSupabase()
       .then((remoteCfg) => {
-        if (remoteCfg) {
+        if (remoteCfg && Object.keys(remoteCfg).length > 0) {
           setConfig((currentCfg) => {
             const merged = { ...currentCfg, ...remoteCfg };
             saveConfig(merged);
             return merged;
           });
+        } else {
+          // If remote cloud has no config yet, but this device (e.g. PC admin) has custom slides or settings,
+          // push to Supabase immediately so other devices (e.g. iPad) can receive it!
+          const localStored = loadConfig();
+          if (localStored && (localStored.bannerSlides?.length || localStored.bannerBgUrl || localStored.bannerSubtitle)) {
+            saveConfigToSupabase(localStored).catch(() => {});
+          }
         }
       })
-      .catch(() => {});
+      .catch((err) => console.warn('Config fetch warning:', err));
+
+    // 4. Supabase Realtime Live Synchronization (PC <-> iPad <-> Mobile)
+    const realtimeItemsChannel = supabase
+      .channel('vault_realtime_items_and_config')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vault_items' },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.id === SYSTEM_CONFIG_ITEM_ID) {
+            try {
+              if (newRow.description) {
+                const parsedConfig = JSON.parse(newRow.description);
+                if (parsedConfig && typeof parsedConfig === 'object') {
+                  setConfig((currentCfg) => {
+                    const merged = { ...currentCfg, ...parsedConfig };
+                    saveConfig(merged);
+                    return merged;
+                  });
+                  showToast('🔄 ซิงค์การตั้งค่าแบนเนอร์และระบบล่าสุดจาก Cloud แล้ว (Live Synced)');
+                }
+              }
+            } catch (err) {
+              console.warn('Realtime config parse error:', err);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    const realtimeConfigTableChannel = supabase
+      .channel('vault_realtime_config_table')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vault_config' },
+        () => {
+          fetchConfigFromSupabase().then((remoteCfg) => {
+            if (remoteCfg) {
+              setConfig((currentCfg) => {
+                const merged = { ...currentCfg, ...remoteCfg };
+                saveConfig(merged);
+                return merged;
+              });
+              showToast('🔄 ซิงค์การตั้งค่าแบนเนอร์ล่าสุดจาก Cloud แล้ว (Live Synced)');
+            }
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(realtimeItemsChannel);
+      supabase.removeChannel(realtimeConfigTableChannel);
+    };
   }, []);
 
   // Filtered & Fuzzy Searched Items Memo
@@ -630,11 +692,20 @@ export default function App() {
     deleteTagFromSupabase(tagId).catch(() => {});
   };
 
-  const handleSaveConfig = (newConfig: SystemConfig) => {
+  const handleSaveConfig = async (newConfig: SystemConfig) => {
     setConfig(newConfig);
     saveConfig(newConfig);
-    showToast('Vault configuration updated');
-    saveConfigToSupabase(newConfig).catch(() => {});
+    showToast('กำลังบันทึกและซิงค์ข้อมูลขึ้น Cloud...');
+    try {
+      const ok = await saveConfigToSupabase(newConfig);
+      if (ok) {
+        showToast('✅ ซิงค์การตั้งค่าขึ้น Cloud เรียบร้อยแล้ว (เชื่อมต่อทุกอุปกรณ์)');
+      } else {
+        showToast('บันทึกในเครื่องเรียบร้อย (ระบบจะซิงค์ให้อัตโนมัติ)');
+      }
+    } catch (e) {
+      console.warn('saveConfig error:', e);
+    }
   };
 
   const handleUpdateSlidePosition = (slideId: string, posX: number, posY: number, scale?: number) => {

@@ -158,12 +158,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSyncToSupabase = async () => {
     setSyncLoading(true);
-    setSyncMessage('Syncing local vault data to Supabase database...');
-    const res = await syncLocalDataToSupabase(items, categories, tags);
+    setSyncMessage('กำลังซิงค์ข้อมูลทั้งหมด (ลิงก์, แบนเนอร์, ระบบ) ขึ้น Supabase Cloud...');
+    const res = await syncLocalDataToSupabase(items, categories, tags, config);
     if (res.success) {
-      setSyncMessage(`Synced ${res.itemsSynced} links, categories & tags to Supabase!`);
+      setSyncMessage(`ซิงค์ข้อมูลสำเร็จ! ลิงก์ ${res.itemsSynced} รายการ พร้อมแบนเนอร์และระบบเชื่อมต่อทุกอุปกรณ์แล้ว`);
     } else {
-      setSyncMessage(`Sync notice: ${res.error || 'Please execute schema.sql in Supabase SQL editor'}`);
+      setSyncMessage(`ผลการซิงค์: ${res.error || 'ระบบบันทึกลงในเครื่องและพยายามซิงค์'}`);
     }
     setSyncLoading(false);
     setTimeout(() => setSyncMessage(null), 6000);

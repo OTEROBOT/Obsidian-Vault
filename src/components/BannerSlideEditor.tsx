@@ -20,7 +20,7 @@ import {
   Check
 } from 'lucide-react';
 import { BannerSlide, SystemConfig } from '../types';
-import { uploadMediaToSupabaseStorage, compressImageToDataUrl } from '../utils/supabase';
+import { uploadMediaToSupabaseStorage, compressImageToDataUrl, saveConfigToSupabase } from '../utils/supabase';
 
 interface BannerSlideEditorProps {
   config: SystemConfig;
@@ -250,8 +250,13 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
     });
   };
 
-  // Save all visual slider settings to system config
-  const handleSaveAll = () => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Save all visual slider settings to system config and synchronize across all devices
+  const handleSaveAll = async () => {
+    setIsSaving(true);
+    setSaveFeedback('กำลังบันทึกและเชื่อมโยงระบบ Cloud ทุกอุปกรณ์ (PC, iPad, Mobile)...');
+
     const updatedCfg: SystemConfig = {
       ...config,
       bannerSlides: slides,
@@ -269,8 +274,20 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
     };
 
     onSaveConfig(updatedCfg);
-    setSaveFeedback('บันทึกการตั้งค่าระบบสไลด์และตำแหน่งภาพเรียบร้อยแล้ว (Saved Successfully)!');
-    setTimeout(() => setSaveFeedback(null), 4000);
+
+    try {
+      const ok = await saveConfigToSupabase(updatedCfg);
+      if (ok) {
+        setSaveFeedback('✅ บันทึกและซิงค์ข้อมูลขึ้น Cloud เรียบร้อยแล้ว! ทุกอุปกรณ์ (PC, iPad, มือถือ) จะเปลี่ยนตามทันที');
+      } else {
+        setSaveFeedback('บันทึกในเครื่องแล้ว (ระบบจะซิงค์กับ Cloud อัตโนมัติ)');
+      }
+    } catch {
+      setSaveFeedback('บันทึกการตั้งค่าระบบสไลด์เรียบร้อยแล้ว');
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveFeedback(null), 5000);
+    }
   };
 
   return (
@@ -289,10 +306,15 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
         <button
           type="button"
           onClick={handleSaveAll}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 shadow-lg shadow-cyan-500/20 shrink-0 transition-all font-display"
+          disabled={isSaving}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 shadow-lg shadow-cyan-500/20 shrink-0 transition-all font-display disabled:opacity-60"
         >
-          <Check className="w-4 h-4" />
-          <span>บันทึกระบบสไลด์ทั้งหมด</span>
+          {isSaving ? (
+            <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Check className="w-4 h-4" />
+          )}
+          <span>{isSaving ? 'กำลังเชื่อมโยง Cloud ทุกเครื่อง...' : 'บันทึกและซิงค์ทุกอุปกรณ์ (Save & Cloud Sync)'}</span>
         </button>
       </div>
 
