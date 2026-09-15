@@ -55,6 +55,7 @@ const storage = getStorage();
 export interface RecentlyViewedRecord {
   itemId: string;
   viewedAt: string;
+  viewCount: number;
 }
 
 export function getDeletedItemIds(): Set<string> {
@@ -280,11 +281,52 @@ export function saveUser(user: UserProfile): void {
   }
 }
 
+export function getUserLikesKey(user?: UserProfile): string {
+  if (user && user.isLoggedIn && user.email) {
+    return `obsidian_vault_likes_${user.email.toLowerCase().trim()}`;
+  }
+  // Persistent guest device UUID
+  let guestId = storage.getItem('obsidian_vault_guest_uid');
+  if (!guestId) {
+    guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    storage.setItem('obsidian_vault_guest_uid', guestId);
+  }
+  return `obsidian_vault_likes_${guestId}`;
+}
+
+export function loadUserLikes(user?: UserProfile): string[] {
+  try {
+    const key = getUserLikesKey(user);
+    const raw = storage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveUserLikes(user: UserProfile, likedIds: string[]): void {
+  try {
+    const key = getUserLikesKey(user);
+    storage.setItem(key, JSON.stringify(likedIds));
+  } catch (e) {
+    console.error('Failed to save user likes:', e);
+  }
+}
+
 export function loadRecentlyViewed(): RecentlyViewedRecord[] {
   try {
     const raw = storage.getItem(KEYS.RECENTLY_VIEWED);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Ensure all records have valid viewCount
+    return parsed.map((item) => ({
+      itemId: item.itemId,
+      viewedAt: item.viewedAt || new Date().toISOString(),
+      viewCount: typeof item.viewCount === 'number' && item.viewCount > 0 ? item.viewCount : 1,
+    }));
   } catch (e) {
     return [];
   }
@@ -293,12 +335,46 @@ export function loadRecentlyViewed(): RecentlyViewedRecord[] {
 export function recordRecentlyViewed(itemId: string): RecentlyViewedRecord[] {
   try {
     const current = loadRecentlyViewed();
+    const existing = current.find((r) => r.itemId === itemId);
+    const previousViews = existing?.viewCount || 0;
     const filtered = current.filter((r) => r.itemId !== itemId);
-    const updated = [{ itemId, viewedAt: new Date().toISOString() }, ...filtered].slice(0, 30);
+
+    const updatedRecord: RecentlyViewedRecord = {
+      itemId,
+      viewedAt: new Date().toISOString(),
+      viewCount: previousViews + 1,
+    };
+
+    const updated = [updatedRecord, ...filtered].slice(0, 50);
     storage.setItem(KEYS.RECENTLY_VIEWED, JSON.stringify(updated));
     return updated;
   } catch (e) {
     console.error('Failed to record recently viewed:', e);
+    return [];
+  }
+}
+
+export function removeRecentlyViewedItem(itemId: string): RecentlyViewedRecord[] {
+  try {
+    const current = loadRecentlyViewed();
+    const updated = current.filter((r) => r.itemId !== itemId);
+    storage.setItem(KEYS.RECENTLY_VIEWED, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    console.error('Failed to remove recently viewed item:', e);
+    return [];
+  }
+}
+
+export function pruneStaleRecentlyViewed(validItemIds: Set<string>): RecentlyViewedRecord[] {
+  try {
+    const current = loadRecentlyViewed();
+    const valid = current.filter((r) => validItemIds.has(r.itemId));
+    if (valid.length !== current.length) {
+      storage.setItem(KEYS.RECENTLY_VIEWED, JSON.stringify(valid));
+    }
+    return valid;
+  } catch (e) {
     return [];
   }
 }

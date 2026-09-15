@@ -290,6 +290,48 @@ export async function deleteItemFromSupabase(id: string): Promise<boolean> {
   }
 }
 
+/**
+ * Patch item likes count directly in Supabase
+ */
+export async function updateItemLikesInSupabase(itemId: string, newLikesCount: number): Promise<boolean> {
+  if (itemId === SYSTEM_CONFIG_ITEM_ID) return false;
+  try {
+    const { error } = await supabase
+      .from('vault_items')
+      .update({ likes_count: newLikesCount })
+      .eq('id', itemId);
+    if (error) {
+      console.warn('Supabase update likes warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase update likes exception:', e);
+    return false;
+  }
+}
+
+/**
+ * Patch item views count directly in Supabase
+ */
+export async function updateItemViewsInSupabase(itemId: string, newViewsCount: number): Promise<boolean> {
+  if (itemId === SYSTEM_CONFIG_ITEM_ID) return false;
+  try {
+    const { error } = await supabase
+      .from('vault_items')
+      .update({ views_count: newViewsCount })
+      .eq('id', itemId);
+    if (error) {
+      console.warn('Supabase update views warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase update views exception:', e);
+    return false;
+  }
+}
+
 export async function fetchCategoriesFromSupabase(): Promise<Category[] | null> {
   try {
     const { data, error } = await supabase.from('vault_categories').select('*').order('name');

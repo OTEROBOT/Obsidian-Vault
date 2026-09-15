@@ -30,6 +30,10 @@ import {
   loadTags, 
   loadUser, 
   recordRecentlyViewed, 
+  removeRecentlyViewedItem,
+  pruneStaleRecentlyViewed,
+  loadUserLikes,
+  saveUserLikes,
   resetAllData, 
   saveCategories, 
   saveComments, 
@@ -49,6 +53,8 @@ import {
   fetchItemsFromSupabase, 
   saveItemToSupabase, 
   deleteItemFromSupabase, 
+  updateItemLikesInSupabase,
+  updateItemViewsInSupabase,
   fetchCategoriesFromSupabase,
   saveCategoryToSupabase,
   deleteCategoryFromSupabase,
@@ -90,6 +96,31 @@ export default function App() {
   const [user, setUser] = useState<UserProfile>(() => loadUser());
   const [recentRecords, setRecentRecords] = useState(() => loadRecentlyViewed());
   const [config, setConfig] = useState<SystemConfig>(() => loadConfig());
+
+  // 1 Account = 1 Like per item tracking state
+  const [userLikedItemIds, setUserLikedItemIds] = useState<Set<string>>(() => new Set(loadUserLikes(user)));
+
+  // Synchronize liked items whenever user identity or login status changes
+  useEffect(() => {
+    setUserLikedItemIds(new Set(loadUserLikes(user)));
+  }, [user.id, user.email, user.isLoggedIn]);
+
+  // Strictly valid recently viewed records where the target item exists in repository
+  const validRecentRecords = useMemo(() => {
+    const itemsMap = new Map(items.map((i) => [i.id, i]));
+    return recentRecords.filter((r) => itemsMap.has(r.itemId));
+  }, [recentRecords, items]);
+
+  // Automatically prune any stale records from storage if items were deleted
+  useEffect(() => {
+    if (items.length > 0) {
+      const validIds = new Set<string>(items.map((i) => i.id));
+      const pruned = pruneStaleRecentlyViewed(validIds);
+      if (pruned.length !== recentRecords.length) {
+        setRecentRecords(pruned);
+      }
+    }
+  }, [items]);
 
   // Strict verified administrator authorization check
   const isRealAdmin = useMemo(() => {
@@ -483,30 +514,87 @@ export default function App() {
     return counts;
   }, [comments]);
 
-  // Handlers
-  const handleOpenPreview = (item: MediaItem) => {
-    // Record recently viewed
+  // Handlers - Intelligent Viewing & Interaction Tracker
+  const handleRecordView = (item: MediaItem) => {
+    // 1. Record recently viewed with incremental viewCount & chronological ordering
     const updatedRecords = recordRecentlyViewed(item.id);
     setRecentRecords(updatedRecords);
 
-    // Increment local views count
+    // 2. Increment local item viewsCount
+    const newViewsCount = (item.viewsCount || 0) + 1;
     const updated = items.map((i) =>
-      i.id === item.id ? { ...i, viewsCount: (i.viewsCount || 0) + 1 } : i
+      i.id === item.id ? { ...i, viewsCount: newViewsCount } : i
     );
     setItems(updated);
     saveItems(updated);
 
-    // Set preview item
-    setPreviewItem({ ...item, viewsCount: (item.viewsCount || 0) + 1 });
+    // 3. Patch view count directly to Supabase Cloud
+    updateItemViewsInSupabase(item.id, newViewsCount).catch(() => {});
+
+    return newViewsCount;
   };
 
+  const handleOpenPreview = (item: MediaItem) => {
+    const newViewsCount = handleRecordView(item);
+    setPreviewItem({ ...item, viewsCount: newViewsCount });
+  };
+
+  // 1 Account = 1 Like Toggle System (Click to like, click again to remove like)
   const handleLikeItem = (itemId: string) => {
-    const updated = items.map((i) =>
-      i.id === itemId ? { ...i, likesCount: (i.likesCount || 0) + 1 } : i
-    );
+    const isLiked = userLikedItemIds.has(itemId);
+    const nextLikesSet = new Set<string>(userLikedItemIds);
+
+    let delta = 0;
+    if (isLiked) {
+      // Toggle OFF (Unlike)
+      nextLikesSet.delete(itemId);
+      delta = -1;
+      showToast('🤍 ยกเลิกการถูกใจแล้ว (-1)');
+    } else {
+      // Toggle ON (Like)
+      nextLikesSet.add(itemId);
+      delta = 1;
+      showToast('❤️ กดถูกใจรายการแล้ว (+1)');
+    }
+
+    // Persist per-account / per-device like state
+    setUserLikedItemIds(nextLikesSet);
+    saveUserLikes(user, Array.from(nextLikesSet));
+
+    // Update item likes count
+    let newLikesCount = 0;
+    const updated = items.map((i) => {
+      if (i.id === itemId) {
+        newLikesCount = Math.max(0, (i.likesCount || 0) + delta);
+        return { ...i, likesCount: newLikesCount };
+      }
+      return i;
+    });
+
     setItems(updated);
     saveItems(updated);
-    showToast(t.toasts.linkLiked);
+
+    // Sync likes count directly to Supabase Cloud
+    updateItemLikesInSupabase(itemId, newLikesCount).catch((e) => {
+      console.warn('Supabase likes count update notice:', e);
+    });
+
+    // Update active modal preview item if open
+    if (previewItem && previewItem.id === itemId) {
+      setPreviewItem((prev) => (prev ? { ...prev, likesCount: newLikesCount } : null));
+    }
+  };
+
+  const handleRemoveRecentItem = (itemId: string) => {
+    const updated = removeRecentlyViewedItem(itemId);
+    setRecentRecords(updated);
+    showToast('ลบรายการออกจากประวัติแล้ว');
+  };
+
+  const handleClearHistory = () => {
+    clearRecentlyViewed();
+    setRecentRecords([]);
+    showToast('ล้างประวัติการเข้าชมทั้งหมดแล้ว');
   };
 
   const handleTogglePin = (itemId: string) => {
@@ -759,12 +847,6 @@ export default function App() {
     }
   };
 
-  const handleClearHistory = () => {
-    clearRecentlyViewed();
-    setRecentRecords([]);
-    showToast('Viewing history cleared');
-  };
-
   const handleLogin = (newUser: UserProfile) => {
     setUser(newUser);
     saveUser(newUser);
@@ -822,7 +904,7 @@ export default function App() {
           }
         }}
         onOpenRecent={() => setIsRecentOpen(true)}
-        recentCount={recentRecords.length}
+        recentCount={validRecentRecords.length}
         searchQuery={filters.query}
         onSearchChange={(q) => setFilters({ ...filters, query: q })}
         vaultName={config.vaultName}
@@ -911,8 +993,10 @@ export default function App() {
                     category={category}
                     user={user}
                     commentCount={commentCountsMap[item.id] || 0}
+                    isLiked={userLikedItemIds.has(item.id)}
                     onPreview={handleOpenPreview}
                     onLike={handleLikeItem}
+                    onRecordView={handleRecordView}
                     onEdit={(it) => {
                       setEditingItem(it);
                       setIsAddEditOpen(true);
@@ -982,7 +1066,7 @@ export default function App() {
         }}
         onScrollToTop={scrollToTop}
         onFocusSearch={focusSearchInput}
-        recentCount={recentRecords.length}
+        recentCount={validRecentRecords.length}
       />
 
       {/* Mobile Slide-out Drawer */}
@@ -1008,7 +1092,7 @@ export default function App() {
           }
         }}
         onOpenRecent={() => setIsRecentOpen(true)}
-        recentCount={recentRecords.length}
+        recentCount={validRecentRecords.length}
       />
 
       {/* Embedded Media Viewer Modal */}
@@ -1017,6 +1101,7 @@ export default function App() {
           item={previewItem}
           user={user}
           comments={comments.filter((c) => c.itemId === previewItem.id)}
+          isLiked={userLikedItemIds.has(previewItem.id)}
           onClose={() => setPreviewItem(null)}
           onLike={handleLikeItem}
           onAddComment={handleAddComment}
@@ -1077,9 +1162,11 @@ export default function App() {
       <RecentlyViewedDrawer
         isOpen={isRecentOpen}
         onClose={() => setIsRecentOpen(false)}
-        recentRecords={recentRecords}
+        recentRecords={validRecentRecords}
         allItems={items}
         onPreview={handleOpenPreview}
+        onRecordView={handleRecordView}
+        onRemoveItem={handleRemoveRecentItem}
         onClearHistory={handleClearHistory}
       />
 

@@ -27,8 +27,10 @@ interface MediaCardProps {
   category?: Category;
   user: UserProfile;
   commentCount: number;
+  isLiked?: boolean;
   onPreview: (item: MediaItem) => void;
   onLike: (itemId: string) => void;
+  onRecordView?: (item: MediaItem) => void;
   onEdit?: (item: MediaItem) => void;
   onDelete?: (itemId: string) => void;
   onTogglePin?: (itemId: string) => void;
@@ -40,8 +42,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   category,
   user,
   commentCount,
+  isLiked = false,
   onPreview,
   onLike,
+  onRecordView,
   onEdit,
   onDelete,
   onTogglePin,
@@ -300,11 +304,24 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 e.stopPropagation();
                 onLike(item.id);
               }}
-              className="flex items-center gap-1 hover:text-rose-400 transition-colors group/heart touch-target"
-              title={`${item.likesCount} ${t.card.likes}`}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg transition-all group/heart touch-target ${
+                isLiked
+                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.15)] font-semibold'
+                  : 'hover:text-rose-400 hover:bg-white/5 border border-transparent'
+              }`}
+              title={isLiked ? 'ยกเลิกการถูกใจ (Unlike)' : `${item.likesCount || 0} ${t.card.likes}`}
+              aria-label={isLiked ? 'Unlike' : 'Like'}
             >
-              <Heart className="w-3.5 h-3.5 text-slate-500 group-hover/heart:text-rose-500 group-hover/heart:fill-rose-500" />
-              <span className="font-mono text-[11px]">{item.likesCount}</span>
+              <Heart
+                className={`w-3.5 h-3.5 transition-transform duration-200 group-hover/heart:scale-125 ${
+                  isLiked
+                    ? 'text-rose-500 fill-rose-500'
+                    : 'text-slate-500 group-hover/heart:text-rose-400'
+                }`}
+              />
+              <span className={`font-mono text-[11px] ${isLiked ? 'text-rose-300 font-bold' : ''}`}>
+                {item.likesCount || 0}
+              </span>
             </button>
 
             <button
@@ -338,11 +355,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               <span className="hidden xs:inline">{t.card.preview}</span>
             </button>
 
-            {/* Direct External Link Navigation */}
+            {/* Direct External Link Navigation with intelligent view recording */}
             <a
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => onRecordView?.(item)}
               className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 transition-all touch-target"
               title={t.card.source}
             >

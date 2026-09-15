@@ -8,7 +8,7 @@ if (typeof window !== 'undefined') {
       try {
         Object.defineProperty(window, 'fetch', {
           get: () => originalFetch,
-          set: (fn) => { /* no-op or reassign */ },
+          set: () => { /* no-op */ },
           configurable: true,
           enumerable: true,
         });
@@ -20,8 +20,32 @@ if (typeof window !== 'undefined') {
     // Ignore
   }
 
+  const isIgnorable = (msg: unknown, file?: string, line?: number) => {
+    if (!msg) return !file && line === 0;
+    const m = String(msg).toLowerCase();
+    return (
+      m === 'script error.' ||
+      m === 'script error' ||
+      m.includes('script error') ||
+      (m.includes('fetch') && m.includes('getter')) ||
+      m.includes('resizeobserver') ||
+      (!file && line === 0)
+    );
+  };
+
   window.addEventListener('error', (event) => {
-    if (event?.message && event.message.includes('fetch') && event.message.includes('getter')) {
+    const msg = event?.message || event?.error?.message;
+    if (isIgnorable(msg, event?.filename, event?.lineno)) {
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+      return true;
+    }
+  }, true);
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event?.reason;
+    const msg = reason?.message || reason;
+    if (isIgnorable(msg, '', 0) || String(msg).toLowerCase().includes('abort')) {
       event.preventDefault();
       event.stopImmediatePropagation?.();
       return true;

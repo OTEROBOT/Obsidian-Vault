@@ -27,6 +27,7 @@ interface EmbeddedMediaViewerProps {
   item: MediaItem;
   user: UserProfile;
   comments: Comment[];
+  isLiked?: boolean;
   onClose: () => void;
   onLike: (itemId: string) => void;
   onAddComment: (itemId: string, content: string, guestNickname?: string) => void;
@@ -38,6 +39,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   item,
   user,
   comments,
+  isLiked = false,
   onClose,
   onLike,
   onAddComment,
@@ -343,7 +345,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
                 ref={webIframeRef}
                 src={item.url}
                 title={item.title}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                sandbox="allow-scripts allow-popups allow-forms allow-presentation"
                 onError={() => setWebIframeFailed(true)}
                 className="w-full h-full border-0"
               />
@@ -472,13 +474,20 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
                 </div>
               )}
 
-              {/* Like Button */}
+              {/* Smart Toggle Like Button */}
               <button
                 onClick={() => onLike(item.id)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 border border-rose-500/30 transition-all shadow-[0_0_20px_rgba(244,63,94,0.15)] touch-target"
+                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all touch-target active:scale-98 ${
+                  isLiked
+                    ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50 shadow-[0_0_25px_rgba(244,63,94,0.3)]'
+                    : 'bg-white/5 text-slate-300 hover:bg-rose-500/15 hover:text-rose-300 border border-white/10 hover:border-rose-500/30'
+                }`}
+                title={isLiked ? 'ยกเลิกการถูกใจ (Unlike)' : 'กดถูกใจ (Like)'}
               >
-                <Heart className="w-4 h-4 fill-rose-500" />
-                <span>{t.card.likes} ({item.likesCount})</span>
+                <Heart className={`w-4 h-4 transition-transform duration-200 ${isLiked ? 'fill-rose-500 text-rose-500 scale-110' : 'text-slate-400'}`} />
+                <span>
+                  {isLiked ? 'ถูกใจแล้ว (คลิกเพื่อยกเลิก)' : t.card.likes} ({item.likesCount || 0})
+                </span>
               </button>
             </div>
 
