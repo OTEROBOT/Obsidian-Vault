@@ -152,32 +152,16 @@ export function loadCategories(): Category[] {
     const raw = storage.getItem(KEYS.CATEGORIES);
     const deleted = getDeletedCategoryIds();
 
-    // Check backup of custom categories
-    let customCats: Category[] = [];
-    try {
-      const customRaw = storage.getItem(KEYS.CUSTOM_CATEGORIES);
-      if (customRaw) {
-        customCats = JSON.parse(customRaw);
-      }
-    } catch {}
-
-    let list: Category[] = INITIAL_CATEGORIES;
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        list = parsed;
-      }
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((c) => !deleted.has(c.id));
+        }
+      } catch {}
     }
 
-    // Ensure custom categories are preserved even if main key was refreshed
-    const existingIds = new Set(list.map((c) => c.id));
-    for (const cc of customCats) {
-      if (!existingIds.has(cc.id) && !deleted.has(cc.id)) {
-        list.push(cc);
-      }
-    }
-
-    return list.filter((c) => !deleted.has(c.id));
+    return INITIAL_CATEGORIES.filter((c) => !deleted.has(c.id));
   } catch (e) {
     return INITIAL_CATEGORIES;
   }
@@ -185,9 +169,11 @@ export function loadCategories(): Category[] {
 
 export function saveCategories(categories: Category[]): void {
   try {
-    storage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
+    const deleted = getDeletedCategoryIds();
+    const clean = categories.filter((c) => !deleted.has(c.id));
+    storage.setItem(KEYS.CATEGORIES, JSON.stringify(clean));
     const initialIds = new Set(INITIAL_CATEGORIES.map((c) => c.id));
-    const custom = categories.filter((c) => !initialIds.has(c.id));
+    const custom = clean.filter((c) => !initialIds.has(c.id));
     storage.setItem(KEYS.CUSTOM_CATEGORIES, JSON.stringify(custom));
   } catch (e) {
     console.error('Failed to save categories:', e);
@@ -199,30 +185,16 @@ export function loadTags(): Tag[] {
     const raw = storage.getItem(KEYS.TAGS);
     const deleted = getDeletedTagIds();
 
-    let customTags: Tag[] = [];
-    try {
-      const customRaw = storage.getItem(KEYS.CUSTOM_TAGS);
-      if (customRaw) {
-        customTags = JSON.parse(customRaw);
-      }
-    } catch {}
-
-    let list: Tag[] = INITIAL_TAGS;
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        list = parsed;
-      }
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((t) => !deleted.has(t.id));
+        }
+      } catch {}
     }
 
-    const existingIds = new Set(list.map((t) => t.id));
-    for (const ct of customTags) {
-      if (!existingIds.has(ct.id) && !deleted.has(ct.id)) {
-        list.push(ct);
-      }
-    }
-
-    return list.filter((t) => !deleted.has(t.id));
+    return INITIAL_TAGS.filter((t) => !deleted.has(t.id));
   } catch (e) {
     return INITIAL_TAGS;
   }
@@ -230,9 +202,11 @@ export function loadTags(): Tag[] {
 
 export function saveTags(tags: Tag[]): void {
   try {
-    storage.setItem(KEYS.TAGS, JSON.stringify(tags));
+    const deleted = getDeletedTagIds();
+    const clean = tags.filter((t) => !deleted.has(t.id));
+    storage.setItem(KEYS.TAGS, JSON.stringify(clean));
     const initialIds = new Set(INITIAL_TAGS.map((t) => t.id));
-    const custom = tags.filter((t) => !initialIds.has(t.id));
+    const custom = clean.filter((t) => !initialIds.has(t.id));
     storage.setItem(KEYS.CUSTOM_TAGS, JSON.stringify(custom));
   } catch (e) {
     console.error('Failed to save tags:', e);

@@ -18,7 +18,7 @@ import {
 import { Category, EmbedType, MediaItem, MediaType, Tag, UserProfile } from '../types';
 import { uploadMediaToSupabaseStorage, STORAGE_BUCKET, ADMIN_EMAIL } from '../utils/supabase';
 import { getDomainFromUrl } from '../utils/storage';
-import { extractSmartTags } from '../utils/tagExtractor';
+import { extractSmartTags, detectSmartCategory } from '../utils/tagExtractor';
 
 interface AddEditLinkModalProps {
   initialItem?: MediaItem | null;
@@ -49,6 +49,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   const [thumbnailUrl, setThumbnailUrl] = useState(initialItem?.thumbnailUrl || '');
   const [mediaType, setMediaType] = useState<MediaType>(initialItem?.mediaType || 'web');
   const [categoryId, setCategoryId] = useState(initialItem?.categoryId || categories[1]?.id || categories[0]?.id || '');
+  const [autoDetectedCategoryName, setAutoDetectedCategoryName] = useState<string | null>(null);
   const [itemTags, setItemTags] = useState<string[]>(initialItem?.tags || []);
   const [isPinned, setIsPinned] = useState(initialItem?.isPinned || false);
 
@@ -85,7 +86,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   };
 
   const applySmartTags = (targetUrl: string, targetTitle: string, targetDesc: string, publisher?: string) => {
-    const detected = extractSmartTags(targetUrl, targetTitle, targetDesc, publisher);
+    const detected = extractSmartTags(targetUrl, targetTitle, targetDesc, publisher, tags);
     if (detected.length > 0) {
       setItemTags((prev) => {
         const set = new Set([...prev]);
@@ -191,7 +192,14 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
         if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
       }
 
-      // Auto-extract and inject relevant hashtags if enabled
+      // 4. Auto-detect category based on URL domain, title, and description
+      const matchedCategory = detectSmartCategory(cleanUrl, finalTitle, finalDesc, categories);
+      if (matchedCategory) {
+        setCategoryId(matchedCategory.id);
+        setAutoDetectedCategoryName(matchedCategory.name);
+      }
+
+      // 5. Auto-extract and inject relevant hashtags if enabled
       if (autoGenerateTags) {
         applySmartTags(cleanUrl, finalTitle, finalDesc, finalPublisher);
       }
@@ -208,6 +216,12 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
         }
         if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
         
+        const matchedCategory = detectSmartCategory(cleanUrl, finalTitle, finalDesc, categories);
+        if (matchedCategory) {
+          setCategoryId(matchedCategory.id);
+          setAutoDetectedCategoryName(matchedCategory.name);
+        }
+
         if (autoGenerateTags) {
           applySmartTags(cleanUrl, finalTitle, finalDesc, finalPublisher);
         }
@@ -592,10 +606,21 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
           {/* Category Selection & Pinned Toggle */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Category</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-slate-300">Category</label>
+                {autoDetectedCategoryName && (
+                  <span className="text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    Auto: {autoDetectedCategoryName}
+                  </span>
+                )}
+              </div>
               <select
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
+                onChange={(e) => {
+                  setCategoryId(e.target.value);
+                  setAutoDetectedCategoryName(null);
+                }}
                 className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 cursor-pointer"
               >
                 {categories.filter(c => c.id !== 'cat-all').map((cat) => (

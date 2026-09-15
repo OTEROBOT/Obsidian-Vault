@@ -271,66 +271,44 @@ export default function App() {
 
   // Hydrate categories, tags, and config from Supabase cloud database
   useEffect(() => {
-    // 1. Categories sync
+    // 1. Categories sync - Supabase is the cloud source of truth
     fetchCategoriesFromSupabase()
       .then((remoteCats) => {
         if (remoteCats && remoteCats.length > 0) {
           const deletedCats = getDeletedCategoryIds();
           const validRemote = remoteCats.filter((c) => !deletedCats.has(c.id));
 
+          // Ensure any locally deleted categories that still exist in Supabase are purged
           deletedCats.forEach((delId) => {
             if (remoteCats.some((c) => c.id === delId)) {
               deleteCategoryFromSupabase(delId).catch(() => {});
             }
           });
 
-          setCategories((currentCats) => {
-            const validLocal = currentCats.filter((c) => !deletedCats.has(c.id));
-            const remoteMap = new Map(validRemote.map((r) => [r.id, r]));
-            const localOnly = validLocal.filter((c) => !remoteMap.has(c.id));
-
-            if (localOnly.length > 0) {
-              localOnly.forEach((cat) => {
-                saveCategoryToSupabase(cat).catch(() => {});
-              });
-            }
-
-            const merged = [...validRemote, ...localOnly];
-            saveCategories(merged);
-            return merged;
-          });
+          // Supabase is authoritative: never re-upload localOnly back to Supabase
+          setCategories(validRemote);
+          saveCategories(validRemote);
         }
       })
       .catch((err) => console.warn('Categories sync warning:', err));
 
-    // 2. Tags sync
+    // 2. Tags sync - Supabase is the cloud source of truth
     fetchTagsFromSupabase()
       .then((remoteTags) => {
         if (remoteTags && remoteTags.length > 0) {
           const deletedTags = getDeletedTagIds();
           const validRemote = remoteTags.filter((t) => !deletedTags.has(t.id));
 
+          // Ensure any locally deleted tags that still exist in Supabase are purged
           deletedTags.forEach((delId) => {
             if (remoteTags.some((t) => t.id === delId)) {
               deleteTagFromSupabase(delId).catch(() => {});
             }
           });
 
-          setTags((currentTags) => {
-            const validLocal = currentTags.filter((t) => !deletedTags.has(t.id));
-            const remoteMap = new Map(validRemote.map((r) => [r.id, r]));
-            const localOnly = validLocal.filter((t) => !remoteMap.has(t.id));
-
-            if (localOnly.length > 0) {
-              localOnly.forEach((tag) => {
-                saveTagToSupabase(tag).catch(() => {});
-              });
-            }
-
-            const merged = [...validRemote, ...localOnly];
-            saveTags(merged);
-            return merged;
-          });
+          // Supabase is authoritative: never re-upload localOnly back to Supabase
+          setTags(validRemote);
+          saveTags(validRemote);
         }
       })
       .catch((err) => console.warn('Tags sync warning:', err));
@@ -747,6 +725,9 @@ export default function App() {
     const updated = categories.filter((c) => c.id !== catId);
     setCategories(updated);
     saveCategories(updated);
+    if (filters.categoryId === catId) {
+      setFilters((prev) => ({ ...prev, categoryId: 'cat-all' }));
+    }
     showToast('Category deleted');
     deleteCategoryFromSupabase(catId).catch(() => {});
   };
@@ -773,9 +754,13 @@ export default function App() {
 
   const handleDeleteTag = (tagId: string) => {
     markTagAsDeleted(tagId);
+    const targetTag = tags.find((t) => t.id === tagId);
     const updated = tags.filter((t) => t.id !== tagId);
     setTags(updated);
     saveTags(updated);
+    if (targetTag && filters.tag === targetTag.name) {
+      setFilters((prev) => ({ ...prev, tag: 'all' }));
+    }
     showToast('Tag deleted');
     deleteTagFromSupabase(tagId).catch(() => {});
   };

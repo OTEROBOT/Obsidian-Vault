@@ -796,11 +796,37 @@ export async function syncLocalDataToSupabase(
       };
     }
 
-    // 1. Sync Categories
+    // 0. Purge any deleted categories and tags from Supabase
+    try {
+      if (typeof window !== 'undefined') {
+        const delCatsRaw = localStorage.getItem('obsidian_vault_deleted_cat_ids_v1');
+        if (delCatsRaw) {
+          const delCats = JSON.parse(delCatsRaw);
+          if (Array.isArray(delCats)) {
+            for (const id of delCats) {
+              await supabase.from('vault_categories').delete().eq('id', id);
+            }
+          }
+        }
+        const delTagsRaw = localStorage.getItem('obsidian_vault_deleted_tag_ids_v1');
+        if (delTagsRaw) {
+          const delTags = JSON.parse(delTagsRaw);
+          if (Array.isArray(delTags)) {
+            for (const id of delTags) {
+              await supabase.from('vault_tags').delete().eq('id', id);
+            }
+          }
+        }
+      }
+    } catch (cleanErr) {
+      console.warn('Sync cleanup warning:', cleanErr);
+    }
+
+    // 1. Sync Categories (only active non-deleted ones)
     for (const cat of categories) {
       await saveCategoryToSupabase(cat);
     }
-    // 2. Sync Tags
+    // 2. Sync Tags (only active non-deleted ones)
     for (const tag of tags) {
       await saveTagToSupabase(tag);
     }
