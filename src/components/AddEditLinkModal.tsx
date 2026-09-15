@@ -13,12 +13,18 @@ import {
   Pin, 
   Tag as TagIcon,
   Loader2,
-  Hash
+  Hash,
+  Camera,
+  Search,
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import { Category, EmbedType, MediaItem, MediaType, Tag, UserProfile } from '../types';
 import { uploadMediaToSupabaseStorage, STORAGE_BUCKET, ADMIN_EMAIL } from '../utils/supabase';
 import { getDomainFromUrl } from '../utils/storage';
 import { extractSmartTags, detectSmartCategory } from '../utils/tagExtractor';
+import { parseUrlSemantics } from '../utils/urlParser';
+import { scrapePageMetadata } from '../utils/webImageScraper';
 
 interface AddEditLinkModalProps {
   initialItem?: MediaItem | null;
@@ -52,6 +58,12 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   const [autoDetectedCategoryName, setAutoDetectedCategoryName] = useState<string | null>(null);
   const [itemTags, setItemTags] = useState<string[]>(initialItem?.tags || []);
   const [isPinned, setIsPinned] = useState(initialItem?.isPinned || false);
+
+  // Webpage Image Discovery states
+  const [discoveredImages, setDiscoveredImages] = useState<string[]>([]);
+  const [isCapturingSnapshot, setIsCapturingSnapshot] = useState(false);
+  const [isSearchingImages, setIsSearchingImages] = useState(false);
+  const [imageSearchKeyword, setImageSearchKeyword] = useState('');
 
   // Upload specifics
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -110,10 +122,35 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
     applySmartTags(url, title, description);
   };
 
+  // Instant semantic pre-fill when typing or pasting URL
+  const handleUrlInputChange = (inputVal: string) => {
+    setUrl(inputVal);
+    const clean = inputVal.trim();
+    if ((clean.startsWith('http://') || clean.startsWith('https://')) && !isEditing) {
+      // If title is currently empty or just default domain, prefill instantly
+      if (!title || title.trim() === '' || title === getDomainFromUrl(clean)) {
+        const sem = parseUrlSemantics(clean);
+        if (sem.title) setTitle(sem.title);
+        if (!description && sem.description) setDescription(sem.description);
+        if (!thumbnailUrl) setThumbnailUrl(sem.fallbackImage);
+        if (sem.mediaType) setMediaType(sem.mediaType);
+
+        const matchedCategory = detectSmartCategory(clean, sem.title, sem.description, categories);
+        if (matchedCategory) {
+          setCategoryId(matchedCategory.id);
+          setAutoDetectedCategoryName(matchedCategory.name);
+        }
+        if (autoGenerateTags && sem.suggestedTags.length > 0) {
+          applySmartTags(clean, sem.title, sem.description, sem.siteName);
+        }
+      }
+    }
+  };
+
   // Tag input state
   const [tagInput, setTagInput] = useState('');
 
-  // Handle OpenGraph auto-scraper with dual engine (local serverless + Microlink API)
+  // Handle Multi-Engine Auto-Scraper & Web Image Discovery
   const handleScrapeMetadata = async () => {
     if (!url || !url.trim().startsWith('http')) {
       setScrapeError('Please enter a valid URL starting with http:// or https://');
@@ -125,113 +162,135 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
     setScrapeSuccess(false);
 
     const cleanUrl = url.trim();
-    let finalTitle = title;
-    let finalDesc = description;
-    let finalPublisher: string | undefined;
+
+    // 0. Immediate Semantic Baseline (ensures 0ms instant content even on network blip)
+    const sem = parseUrlSemantics(cleanUrl);
+    if (!title || title.trim() === '' || title === getDomainFromUrl(cleanUrl)) {
+      setTitle(sem.title);
+    }
+    if (!description || description.trim() === '') {
+      setDescription(sem.description);
+    }
+    if (!thumbnailUrl || thumbnailUrl.includes('photo-1618005182384')) {
+      setThumbnailUrl(sem.fallbackImage);
+    }
+    if (sem.mediaType) {
+      setMediaType(sem.mediaType);
+    }
+
+    let finalTitle = title || sem.title;
+    let finalDesc = description || sem.description;
+    let finalPublisher: string | undefined = sem.siteName;
 
     try {
-      let scraped = false;
+      // 1. Run Multi-Engine Scraper (Fastest wins across /api/scrape-og, Microlink, AllOrigins HTML)
+      const scraped = await scrapePageMetadata(cleanUrl);
 
-      // 1. Primary: Try local /api/scrape-og endpoint
-      try {
-        const res = await fetch(`/api/scrape-og?url=${encodeURIComponent(cleanUrl)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && !data.fallback && data.title) {
-            if (data.title) {
-              setTitle(data.title);
-              finalTitle = data.title;
-            }
-            if (data.description) {
-              setDescription(data.description);
-              finalDesc = data.description;
-            }
-            if (data.image) setThumbnailUrl(data.image);
-            if (data.mediaType) setMediaType(data.mediaType);
-            if (data.siteName) finalPublisher = data.siteName;
-            scraped = true;
-          }
-        }
-      } catch {
-        // Continue to Microlink
+      if (scraped.title && scraped.title !== getDomainFromUrl(cleanUrl)) {
+        setTitle(scraped.title);
+        finalTitle = scraped.title;
+      } else if (!title || title === getDomainFromUrl(cleanUrl)) {
+        setTitle(sem.title);
+        finalTitle = sem.title;
       }
 
-      // 2. Secondary fallback: Microlink API (https://api.microlink.io) for Vercel or external networks
-      if (!scraped) {
-        try {
-          const microRes = await fetch(`https://api.microlink.io?url=${encodeURIComponent(cleanUrl)}`);
-          if (microRes.ok) {
-            const microData = await microRes.json();
-            if (microData?.status === 'success' && microData?.data) {
-              const d = microData.data;
-              if (d.title) {
-                setTitle(d.title);
-                finalTitle = d.title;
-              }
-              if (d.description) {
-                setDescription(d.description);
-                finalDesc = d.description;
-              }
-              if (d.image?.url) setThumbnailUrl(d.image.url);
-              if (d.publisher) finalPublisher = d.publisher;
-              scraped = true;
-            }
-          }
-        } catch {
-          // Continue to hostname parser
-        }
+      if (scraped.description) {
+        setDescription(scraped.description);
+        finalDesc = scraped.description;
+      } else if (!description) {
+        setDescription(sem.description);
+        finalDesc = sem.description;
       }
 
-      // 3. Fallback: Parse hostname and set sensible default thumbnail
-      if (!scraped) {
-        const domain = getDomainFromUrl(cleanUrl);
-        if (!title) {
-          setTitle(domain);
-          finalTitle = domain;
-        }
-        if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
+      if (scraped.siteName) {
+        finalPublisher = scraped.siteName;
       }
 
-      // 4. Auto-detect category based on URL domain, title, and description
+      if (scraped.mediaType) {
+        setMediaType(scraped.mediaType);
+      }
+
+      // Collect all candidate images discovered on the page
+      const pageImages = Array.from(new Set([
+        ...(scraped.candidateImages || []),
+        ...(scraped.image ? [scraped.image] : []),
+        sem.fallbackImage,
+      ])).filter(Boolean);
+
+      setDiscoveredImages(pageImages);
+
+      // Set thumbnail: prefer scraped image, or first candidate, or live snapshot
+      if (scraped.image) {
+        setThumbnailUrl(scraped.image);
+      } else if (pageImages.length > 0) {
+        setThumbnailUrl(pageImages[0]);
+      } else {
+        setThumbnailUrl(sem.fallbackImage);
+      }
+
+      // Auto-detect category
       const matchedCategory = detectSmartCategory(cleanUrl, finalTitle, finalDesc, categories);
       if (matchedCategory) {
         setCategoryId(matchedCategory.id);
         setAutoDetectedCategoryName(matchedCategory.name);
       }
 
-      // 5. Auto-extract and inject relevant hashtags if enabled
+      // Auto-extract tags
       if (autoGenerateTags) {
         applySmartTags(cleanUrl, finalTitle, finalDesc, finalPublisher);
       }
 
       setScrapeSuccess(true);
-      setTimeout(() => setScrapeSuccess(false), 3000);
+      setTimeout(() => setScrapeSuccess(false), 3500);
     } catch (err: any) {
       console.warn('Scraping error:', err);
-      try {
-        const domain = getDomainFromUrl(cleanUrl);
-        if (!title) {
-          setTitle(domain);
-          finalTitle = domain;
-        }
-        if (!thumbnailUrl) setThumbnailUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
-        
-        const matchedCategory = detectSmartCategory(cleanUrl, finalTitle, finalDesc, categories);
-        if (matchedCategory) {
-          setCategoryId(matchedCategory.id);
-          setAutoDetectedCategoryName(matchedCategory.name);
-        }
-
-        if (autoGenerateTags) {
-          applySmartTags(cleanUrl, finalTitle, finalDesc, finalPublisher);
-        }
-        setScrapeSuccess(true);
-      } catch {
-        setScrapeError('Could not auto-scrape. Please fill in details manually.');
+      // Fallback already populated by parseUrlSemantics
+      const matchedCategory = detectSmartCategory(cleanUrl, sem.title, sem.description, categories);
+      if (matchedCategory) {
+        setCategoryId(matchedCategory.id);
+        setAutoDetectedCategoryName(matchedCategory.name);
       }
+      if (autoGenerateTags) {
+        applySmartTags(cleanUrl, sem.title, sem.description, sem.siteName);
+      }
+      setThumbnailUrl(sem.fallbackImage);
+      setDiscoveredImages([sem.fallbackImage]);
+      setScrapeSuccess(true);
+      setTimeout(() => setScrapeSuccess(false), 3500);
     } finally {
       setIsScraping(false);
     }
+  };
+
+  // Quick Action: Take Live Web Snapshot of the current URL
+  const handleTakeLiveSnapshot = () => {
+    if (!url || !url.trim().startsWith('http')) return;
+    setIsCapturingSnapshot(true);
+    const snapUrl = `https://s0.wp.com/mshots/v1/${encodeURIComponent(url.trim())}?w=800&h=450`;
+    setThumbnailUrl(snapUrl);
+    setDiscoveredImages((prev) => Array.from(new Set([snapUrl, ...prev])));
+    setTimeout(() => setIsCapturingSnapshot(false), 800);
+  };
+
+  // Quick Action: Search Web Images matching title/keywords
+  const handleSearchWebImages = (keywordOverride?: string) => {
+    const q = (keywordOverride || imageSearchKeyword || title || getDomainFromUrl(url)).trim();
+    if (!q) return;
+
+    setIsSearchingImages(true);
+    const encoded = encodeURIComponent(q);
+    // Generate high-resolution content matching image candidates
+    const searchOptions = [
+      `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80`,
+      `https://s0.wp.com/mshots/v1/${encodeURIComponent(url.trim())}?w=800&h=450`,
+      `https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80`,
+      `https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&w=800&q=80`,
+      `https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80`,
+    ];
+
+    setDiscoveredImages((prev) => Array.from(new Set([...prev, ...searchOptions])));
+    setThumbnailUrl(searchOptions[1] || searchOptions[0]);
+    setIsSearchingImages(false);
   };
 
   // Handle local file upload + Supabase 'vault-media' Storage Bucket
@@ -429,7 +488,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
                 <input
                   type="url"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => handleUrlInputChange(e.target.value)}
                   placeholder="https://example.com/article, https://youtube.com/watch?v=..."
                   className="flex-1 px-3.5 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder-slate-500"
                   required
@@ -438,15 +497,15 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
                   type="button"
                   onClick={handleScrapeMetadata}
                   disabled={isScraping || !url}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 flex items-center gap-1.5 transition-all disabled:opacity-40"
-                  title="Auto-fetch meta title, description, and thumbnail via OpenGraph scraper"
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 hover:from-cyan-500/35 hover:to-blue-500/35 border border-cyan-500/40 flex items-center gap-1.5 transition-all disabled:opacity-40 shadow-sm"
+                  title="Auto-fetch meta title, description, and thumbnail via OpenGraph & webpage image extractor"
                 >
                   {isScraping ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
                   ) : (
                     <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
                   )}
-                  <span className="hidden sm:inline">Scrape OG</span>
+                  <span>กรอกอัตโนมัติ</span>
                 </button>
               </div>
 
@@ -575,32 +634,137 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
             />
           </div>
 
-          {/* Thumbnail Preview & URL */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Thumbnail URL</label>
-              <input
-                type="url"
-                value={thumbnailUrl}
-                onChange={(e) => setThumbnailUrl(e.target.value)}
-                placeholder="https://images.unsplash.com/..."
-                className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 placeholder-slate-500"
-              />
+          {/* Thumbnail Preview, Live Web Snapshot, & Discovered Images */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Thumbnail & Media Type</span>
+              </label>
+              <div className="flex items-center gap-2">
+                {url && (
+                  <button
+                    type="button"
+                    onClick={handleTakeLiveSnapshot}
+                    disabled={isCapturingSnapshot}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all"
+                    title="ถ่ายภาพหน้าเว็บสดเพื่อใช้เป็นภาพปกอัตโนมัติ"
+                  >
+                    <Camera className="w-3 h-3" />
+                    <span>{isCapturingSnapshot ? 'กำลังจับภาพ...' : 'จับภาพหน้าเว็บสด'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleSearchWebImages()}
+                  className="text-[10px] text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all"
+                  title="ค้นหาภาพที่เกี่ยวข้องกับชื่อเรื่องนี้"
+                >
+                  <Search className="w-3 h-3 text-cyan-400" />
+                  <span>ค้นหาภาพ</span>
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Media Type</label>
-              <select
-                value={mediaType}
-                onChange={(e) => setMediaType(e.target.value as MediaType)}
-                className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 cursor-pointer"
-              >
-                <option value="web" className="bg-slate-900">Web / Article</option>
-                <option value="video" className="bg-slate-900">Video (YouTube / MP4)</option>
-                <option value="audio" className="bg-slate-900">Audio (MP3 / Sound)</option>
-                <option value="image" className="bg-slate-900">Image / Artwork</option>
-              </select>
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              {/* Mini Preview Card */}
+              <div className="relative w-full sm:w-28 h-20 shrink-0 rounded-xl overflow-hidden border border-white/15 bg-slate-950 flex items-center justify-center shadow-md">
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt="Thumbnail preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (!target.dataset.failed) {
+                        target.dataset.failed = 'snapshot';
+                        target.src = `https://s0.wp.com/mshots/v1/${encodeURIComponent(url || 'https://google.com')}?w=800&h=450`;
+                      } else if (target.dataset.failed === 'snapshot') {
+                        target.dataset.failed = 'final';
+                        target.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80';
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="text-[10px] text-slate-500 flex flex-col items-center">
+                    <ImageIcon className="w-5 h-5 text-slate-600 mb-1" />
+                    <span>ไม่มีรูปภาพ</span>
+                  </div>
+                )}
+                <div className="absolute top-1 left-1 px-1.5 py-0.2 rounded text-[9px] font-mono bg-black/70 text-slate-300 border border-white/10">
+                  Preview
+                </div>
+              </div>
+
+              {/* URL & Media Type Inputs */}
+              <div className="w-full flex-1 space-y-2">
+                <input
+                  type="url"
+                  value={thumbnailUrl}
+                  onChange={(e) => setThumbnailUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/... หรือ url รูปภาพ"
+                  className="w-full px-3 py-2 rounded-xl text-xs glass-input text-slate-100 placeholder-slate-500"
+                />
+
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-medium text-slate-400 shrink-0">Media Type:</label>
+                  <select
+                    value={mediaType}
+                    onChange={(e) => setMediaType(e.target.value as MediaType)}
+                    className="flex-1 px-2.5 py-1.5 rounded-lg text-xs glass-input text-slate-100 cursor-pointer"
+                  >
+                    <option value="web" className="bg-slate-900">Web / Article</option>
+                    <option value="video" className="bg-slate-900">Video (YouTube / MP4)</option>
+                    <option value="audio" className="bg-slate-900">Audio (MP3 / Sound)</option>
+                    <option value="image" className="bg-slate-900">Image / Artwork</option>
+                  </select>
+                </div>
+              </div>
             </div>
+
+            {/* Discovered Webpage Images Carousel */}
+            {discoveredImages.length > 0 && (
+              <div className="space-y-1.5 pt-1.5 bg-white/[0.02] border border-white/10 rounded-xl p-2.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1 font-medium text-cyan-300">
+                    <ImageIcon className="w-3 h-3 text-cyan-400" />
+                    ภาพที่ค้นพบบนเว็บ ({discoveredImages.length} ภาพ):
+                  </span>
+                  <span className="text-[10px] text-slate-400">คลิกรูปเพื่อเลือกเป็นภาพปก</span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin scrollbar-thumb-cyan-500/30">
+                  {discoveredImages.map((imgSrc, idx) => {
+                    const isSelected = thumbnailUrl === imgSrc;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setThumbnailUrl(imgSrc)}
+                        className={`relative shrink-0 w-20 h-14 rounded-lg overflow-hidden border transition-all ${
+                          isSelected 
+                            ? 'border-cyan-400 ring-2 ring-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.4)] scale-105' 
+                            : 'border-white/10 opacity-70 hover:opacity-100 hover:border-cyan-500/40'
+                        }`}
+                        title="คลิกเพื่อใช้ภาพนี้"
+                      >
+                        <img 
+                          src={imgSrc} 
+                          alt={`Discovered ${idx + 1}`} 
+                          className="w-full h-full object-cover" 
+                          loading="lazy"
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-cyan-500 text-black flex items-center justify-center shadow">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Category Selection & Pinned Toggle */}

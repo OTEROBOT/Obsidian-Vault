@@ -191,7 +191,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           onError={(e) => {
             const target = e.target as HTMLImageElement;
             if (!target.dataset.failed) {
-              target.dataset.failed = 'true';
+              target.dataset.failed = 'snapshot';
+              target.src = `https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=800&h=450`;
+            } else if (target.dataset.failed === 'snapshot') {
+              target.dataset.failed = 'final';
               target.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80';
             }
           }}

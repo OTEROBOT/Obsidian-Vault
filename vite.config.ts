@@ -20,9 +20,10 @@ function openGraphScraperPlugin(): Plugin {
 
         // 2. OpenGraph metadata scraping endpoint
         if (req.url.startsWith('/api/scrape-og')) {
+          let targetUrl: string | null = null;
           try {
             const reqUrl = new URL(req.url, 'http://localhost:3000');
-            const targetUrl = reqUrl.searchParams.get('url');
+            targetUrl = reqUrl.searchParams.get('url');
 
             if (!targetUrl) {
               res.setHeader('Content-Type', 'application/json');
@@ -96,16 +97,24 @@ function openGraphScraperPlugin(): Plugin {
               return;
             }
 
+            // E-Hentai / Mature site cookies
+            let customCookies = '';
+            if (parsedTarget.hostname.includes('e-hentai.org') || parsedTarget.hostname.includes('exhentai.org')) {
+              customCookies = 'nw=1';
+            }
+
             // Fetch external HTML with timeout
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 5000);
+            const timeout = setTimeout(() => controller.abort(), 4500);
 
             try {
               const fetchRes = await fetch(targetUrl, {
                 signal: controller.signal,
                 headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 VoidMarkBot/1.0',
-                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                  'Accept-Language': 'en-US,en;q=0.9,th;q=0.8,ja;q=0.7',
+                  'Cookie': customCookies,
                 },
               });
               clearTimeout(timeout);
@@ -125,20 +134,50 @@ function openGraphScraperPlugin(): Plugin {
                   return null;
                 };
 
-                let title = getMeta(['og:title', 'twitter:title', 'title']);
+                let title = getMeta(['og:title', 'twitter:title']);
                 if (!title) {
                   const tm = html.match(/<title[^>]*>([^<]+)<\/title>/i);
                   if (tm && tm[1]) title = tm[1].trim();
                 }
 
                 const description = getMeta(['og:description', 'twitter:description', 'description']) || '';
-                let image = getMeta(['og:image:secure_url', 'og:image', 'twitter:image', 'twitter:image:src', 'image']);
-                if (image && !image.startsWith('http')) {
+                let ogImage = getMeta(['og:image:secure_url', 'og:image', 'twitter:image', 'twitter:image:src', 'image']);
+
+                const candidateImages: string[] = [];
+                const seen = new Set<string>();
+
+                if (ogImage) {
                   try {
-                    image = new URL(image, targetUrl).toString();
-                  } catch {
-                    // ignore
+                    if (!ogImage.startsWith('http')) ogImage = new URL(ogImage, targetUrl).toString();
+                    candidateImages.push(ogImage);
+                    seen.add(ogImage);
+                  } catch {}
+                }
+
+                // Discover images from <img> tags in HTML
+                const imgTagRegex = /<img\b([^>]*)>/gi;
+                let imgMatch;
+                while ((imgMatch = imgTagRegex.exec(html)) !== null && candidateImages.length < 15) {
+                  const attrs = imgMatch[1];
+                  const srcMatch = attrs.match(/\b(?:data-(?:highres|original|src|thumb)|src)=["']([^"']+)["']/i);
+                  if (srcMatch && srcMatch[1]) {
+                    const raw = srcMatch[1].trim();
+                    if (!raw.includes('spacer') && !raw.includes('pixel') && !raw.includes('1x1') && !raw.includes('favicon') && !raw.startsWith('data:image/svg')) {
+                      try {
+                        const full = raw.startsWith('http') ? raw : new URL(raw, targetUrl).toString();
+                        if (!seen.has(full)) {
+                          seen.add(full);
+                          candidateImages.push(full);
+                        }
+                      } catch {}
+                    }
                   }
+                }
+
+                const liveSnapshot = `https://s0.wp.com/mshots/v1/${encodeURIComponent(targetUrl)}?w=800&h=450`;
+                const chosenImage = candidateImages.length > 0 ? candidateImages[0] : liveSnapshot;
+                if (!candidateImages.includes(liveSnapshot)) {
+                  candidateImages.push(liveSnapshot);
                 }
 
                 const siteName = getMeta(['og:site_name', 'application-name', 'publisher']) || parsedTarget.hostname.replace('www.', '');
@@ -149,7 +188,8 @@ function openGraphScraperPlugin(): Plugin {
                 res.end(JSON.stringify({
                   title: title || parsedTarget.hostname,
                   description,
-                  image: image || '',
+                  image: chosenImage,
+                  candidateImages,
                   siteName,
                   favicon,
                   mediaType: 'web',
@@ -161,12 +201,14 @@ function openGraphScraperPlugin(): Plugin {
             }
 
             // Fallback response if fetch fails
+            const liveSnapshot = `https://s0.wp.com/mshots/v1/${encodeURIComponent(targetUrl)}?w=800&h=450`;
             res.setHeader('Content-Type', 'application/json');
             res.statusCode = 200;
             res.end(JSON.stringify({
               title: parsedTarget.hostname + (parsedTarget.pathname !== '/' ? parsedTarget.pathname : ''),
               description: 'Archived vault bookmark',
-              image: '',
+              image: liveSnapshot,
+              candidateImages: [liveSnapshot],
               siteName: parsedTarget.hostname.replace('www.', ''),
               favicon: `https://www.google.com/s2/favicons?domain=${parsedTarget.hostname}&sz=64`,
               mediaType: 'web',
@@ -179,7 +221,8 @@ function openGraphScraperPlugin(): Plugin {
             res.end(JSON.stringify({
               title: 'Vault Link',
               description: '',
-              image: '',
+              image: `https://s0.wp.com/mshots/v1/${encodeURIComponent(targetUrl || 'https://google.com')}?w=800&h=450`,
+              candidateImages: [],
               mediaType: 'web',
               fallback: true,
             }));
