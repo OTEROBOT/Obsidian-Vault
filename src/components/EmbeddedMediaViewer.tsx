@@ -16,12 +16,65 @@ import {
   Tag as TagIcon,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  Info,
+  Lock
 } from 'lucide-react';
 import { Comment, MediaItem, UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { getDomainFromUrl } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
+
+// Domains that strictly prohibit iframe embedding via X-Frame-Options: DENY or CSP frame-ancestors
+const BLOCKED_IFRAME_DOMAINS = [
+  'x.com',
+  'twitter.com',
+  't.co',
+  'instagram.com',
+  'facebook.com',
+  'fb.com',
+  'threads.net',
+  'tiktok.com',
+  'reddit.com',
+  'pixiv.net',
+  'discord.com',
+  'github.com',
+  'linkedin.com',
+  'pinterest.com',
+  'dlsite.com',
+  'bilibili.com'
+];
+
+const isTwitterOrX = (url: string): boolean => {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com') || host === 't.co';
+  } catch {
+    return false;
+  }
+};
+
+const getTwitterHandle = (url: string): string | null => {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (parts.length > 0 && !['home', 'explore', 'notifications', 'messages', 'i', 'hashtag', 'search'].includes(parts[0])) {
+      return `@${parts[0]}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const isKnownIframeBlocked = (url: string): boolean => {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return BLOCKED_IFRAME_DOMAINS.some((d) => host === d || host.endsWith('.' + d));
+  } catch {
+    return false;
+  }
+};
 
 interface EmbeddedMediaViewerProps {
   item: MediaItem;
@@ -53,6 +106,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   const [commentError, setCommentError] = useState<string | null>(null);
   const [imageZoom, setImageZoom] = useState(1);
   const [webIframeFailed, setWebIframeFailed] = useState(false);
+  const [tryForceIframe, setTryForceIframe] = useState(false);
 
   // Strict DOM refs for Safari hardware decoder and memory cleanup
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -112,6 +166,9 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
 
   // Cleanup on unmount or item ID change
   useEffect(() => {
+    setWebIframeFailed(false);
+    setTryForceIframe(false);
+    setImageZoom(1);
     return () => {
       disposeMedia();
     };
@@ -288,7 +345,118 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
       );
     }
 
-    // 5. Web / Article / OpenGraph Reader View
+    // 5. Special Dedicated Sleek Card for X (Twitter)
+    if (isTwitterOrX(item.url)) {
+      const handle = getTwitterHandle(item.url);
+      const isPost = item.url.includes('/status/');
+
+      return (
+        <div className="w-full space-y-4">
+          <div className="rounded-2xl bg-[#000000] border border-white/20 p-5 sm:p-7 shadow-2xl space-y-5 relative overflow-hidden">
+            {/* Ambient accent background */}
+            <div className="absolute top-0 right-0 w-72 h-72 bg-sky-500/[0.04] rounded-full blur-3xl pointer-events-none" />
+
+            {/* Top Brand Bar */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-white font-bold text-xl shadow-inner select-none">
+                  𝕏
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm sm:text-base font-bold text-white tracking-tight">
+                      {isPost ? 'X Post / Tweet' : 'X Profile'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-white/10 text-slate-300 border border-white/15">
+                      x.com
+                    </span>
+                  </div>
+                  {handle && (
+                    <p className="text-xs text-sky-400 font-mono mt-0.5">
+                      {handle}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white text-black hover:bg-slate-200 transition-all shadow-md touch-target active:scale-95"
+              >
+                <span>เปิดบน 𝕏</span>
+                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+              </a>
+            </div>
+
+            {/* Media Content & Description */}
+            <div className="flex flex-col md:flex-row gap-5 items-start">
+              {item.thumbnailUrl && (
+                <div className="relative w-full md:w-64 aspect-video rounded-xl overflow-hidden bg-zinc-900 border border-white/10 shrink-0 shadow-lg">
+                  <img
+                    src={item.thumbnailUrl}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <div className="flex-1 space-y-2.5 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white leading-snug">
+                  {item.title}
+                </h3>
+                {item.description && (
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+                    {item.description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Explanatory Security Notice */}
+            <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3.5 flex items-start gap-3 text-xs text-slate-300">
+              <div className="w-5 h-5 rounded-md bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
+                <Info className="w-3.5 h-3.5" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-slate-200">
+                  ทำไม X (Twitter) ถึงเปิดหน้าเว็บในกรอบ Iframe ด้านในไม่ได้?
+                </p>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  เนื่องจาก X (Twitter) มีการตั้งค่าความปลอดภัยระดับสากล (<code className="text-cyan-300 font-mono">X-Frame-Options: DENY</code>) เพื่อป้องกันการโจมตีแบบดักข้อมูล (Clickjacking) เบราว์เซอร์จึงไม่อนุญาตให้ฝังหน้าเว็บลงในกรอบ Iframe โดยตรง หากเปิดกรอบ Iframe จะกลายเป็นหน้าจอขาวว่างเปล่า คุณสามารถแตะปุ่ม <strong>"เปิดดูบนแอป 𝕏"</strong> เพื่อเปิดหน้าโปรไฟล์/ทวีตนี้ได้เต็มรูปแบบทันที
+                </p>
+              </div>
+            </div>
+
+            {/* Action Row */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-white text-black hover:bg-slate-200 transition-all touch-target shadow-lg shadow-white/5 active:scale-95"
+              >
+                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>เปิดดูบนแอป 𝕏 หรือหน้าต่างใหม่</span>
+              </a>
+              <button
+                onClick={handleCopyLink}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/10 hover:bg-white/15 border border-white/10 transition-all touch-target"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? t.card.copied : 'คัดลอกลิงก์ 𝕏'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const isBlocked = isKnownIframeBlocked(item.url);
+
+    // 6. Web / Article / OpenGraph Reader View
     return (
       <div className="w-full space-y-4">
         {/* Rich OpenGraph Card */}
@@ -309,7 +477,9 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
                 <span>{item.siteName || getDomainFromUrl(item.url)}</span>
               </div>
               <h3 className="text-lg sm:text-xl font-bold text-slate-100 leading-snug">{item.title}</h3>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{item.description}</p>
+              {item.description && (
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{item.description}</p>
+              )}
               
               <div className="pt-2 flex flex-wrap items-center gap-2 sm:gap-3">
                 <a
@@ -333,38 +503,75 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
           </div>
         </div>
 
-        {/* Live Iframe Sandbox Preview with Graceful Fallback & Safari Disposal */}
-        <div className="rounded-2xl glass-panel overflow-hidden border border-white/10">
-          <div className="px-4 py-2.5 bg-black/60 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-            <span className="font-mono text-[11px] truncate max-w-sm">Direct Iframe: {item.url}</span>
-            <span className="text-[10px] text-slate-500">Note: Some sites block iframe embedding</span>
-          </div>
-          {!webIframeFailed ? (
-            <div className="relative h-[380px] sm:h-[420px] w-full bg-slate-950">
-              <iframe
-                ref={webIframeRef}
-                src={item.url}
-                title={item.title}
-                sandbox="allow-scripts allow-popups allow-forms allow-presentation"
-                onError={() => setWebIframeFailed(true)}
-                className="w-full h-full border-0"
-              />
+        {/* Live Iframe Sandbox Preview or Provider Security Notice */}
+        {isBlocked && !tryForceIframe ? (
+          <div className="rounded-2xl glass-panel p-6 border border-white/10 text-center space-y-3">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.15)]">
+              <Lock className="w-6 h-6" />
             </div>
-          ) : (
-            <div className="p-8 text-center text-slate-400 space-y-2">
-              <p className="text-sm text-slate-300">This external provider has restricted direct iframe embedding.</p>
+            <div className="space-y-1 max-w-md mx-auto">
+              <h4 className="text-sm font-bold text-slate-100">
+                เว็บไซต์นี้ปิดกั้นการแสดงผลผ่าน Iframe เพื่อความปลอดภัย
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                ผู้ให้บริการ ({item.siteName || getDomainFromUrl(item.url)}) ไม่อนุญาตให้เปิดเนื้อหาภายในกรอบเว็บไซต์อื่น แนะนำให้เปิดดูโดยตรงผ่านเบราว์เซอร์
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
               <a
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 touch-target"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all touch-target shadow-lg shadow-emerald-500/20"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open {item.siteName || 'External Site'} Directly</span>
+                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>เปิด {item.siteName || 'เว็บไซต์นี้'} โดยตรง</span>
               </a>
+              <button
+                onClick={() => setTryForceIframe(true)}
+                className="px-3 py-2 rounded-xl text-[11px] font-mono text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+              >
+                ลองโหลดผ่าน Iframe อย่างไรก็ตาม
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl glass-panel overflow-hidden border border-white/10">
+            <div className="px-4 py-2.5 bg-black/60 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+              <span className="font-mono text-[11px] truncate max-w-sm">Direct Iframe: {item.url}</span>
+              <span className="text-[10px] text-slate-500">Note: Some sites block iframe embedding</span>
+            </div>
+            {!webIframeFailed ? (
+              <div 
+                className="relative h-[380px] sm:h-[420px] w-full bg-[#090a0f]"
+                style={{ backgroundColor: '#090a0f', colorScheme: 'dark' }}
+              >
+                <iframe
+                  ref={webIframeRef}
+                  src={item.url}
+                  title={item.title}
+                  sandbox="allow-scripts allow-popups allow-forms allow-presentation"
+                  onError={() => setWebIframeFailed(true)}
+                  className="w-full h-full border-0"
+                  style={{ backgroundColor: '#090a0f' }}
+                />
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-400 space-y-2">
+                <p className="text-sm text-slate-300">This external provider has restricted direct iframe embedding.</p>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 touch-target"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open {item.siteName || 'External Site'} Directly</span>
+                </a>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
