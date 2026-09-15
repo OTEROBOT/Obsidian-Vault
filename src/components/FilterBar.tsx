@@ -15,6 +15,7 @@ import {
   Tag as TagIcon,
   X,
   Grid,
+  LayoutGrid,
   List
 } from 'lucide-react';
 import { Category, MediaType, SearchFilters, Tag } from '../types';
@@ -27,8 +28,8 @@ interface FilterBarProps {
   onFilterChange: (filters: SearchFilters) => void;
   categoryCounts: Record<string, number>;
   totalItemCount: number;
-  viewMode: 'grid' | 'compact';
-  onViewModeChange: (mode: 'grid' | 'compact') => void;
+  viewMode: 'grid' | 'large' | 'compact';
+  onViewModeChange: (mode: 'grid' | 'large' | 'compact') => void;
 }
 
 // Helper to map category icon string to Lucide component
@@ -180,11 +181,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </div>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-black/40 dark:bg-black/40 p-0.5 rounded-lg border border-white/10">
+          <div className="flex items-center bg-black/40 dark:bg-black/40 p-0.5 rounded-lg border border-white/10 shadow-sm">
             <button
               onClick={() => onViewModeChange('grid')}
               className={`p-1.5 rounded text-xs transition-colors touch-target ${
-                viewMode === 'grid' ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'
+                viewMode === 'grid' ? 'bg-white/15 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
               title={t.filters.gridView}
               aria-label={t.filters.gridView}
@@ -192,9 +193,19 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               <Grid className="w-3.5 h-3.5" />
             </button>
             <button
+              onClick={() => onViewModeChange('large')}
+              className={`p-1.5 rounded text-xs transition-colors touch-target ${
+                viewMode === 'large' ? 'bg-cyan-500/25 text-cyan-300 shadow-sm border border-cyan-500/40' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="โหมดภาพใหญ่ (Large Cover View)"
+              aria-label="Large Cover View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={() => onViewModeChange('compact')}
               className={`p-1.5 rounded text-xs transition-colors touch-target ${
-                viewMode === 'compact' ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'
+                viewMode === 'compact' ? 'bg-white/15 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
               title={t.filters.compactView}
               aria-label={t.filters.compactView}

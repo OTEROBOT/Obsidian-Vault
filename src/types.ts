@@ -30,6 +30,7 @@ export interface MediaItem {
   createdAt: string; // ISO 8601
   updatedAt: string;
   isPinned?: boolean;
+  imageFit?: 'cover' | 'contain';
   source: 'url' | 'upload';
   fileName?: string;
   fileSize?: string;
@@ -111,7 +112,7 @@ export interface SystemConfig {
   vaultName: string;
   vaultTagline: string;
   allowGuestComments: boolean;
-  defaultViewMode: 'grid' | 'compact';
+  defaultViewMode: 'grid' | 'large' | 'compact';
   autoScrapeOpenGraph: boolean;
   // Visual Branding Customizations
   logoUrl?: string;

@@ -141,7 +141,20 @@ export default function App() {
     pinnedOnly: false,
   });
 
-  const [viewMode, setViewMode] = useState<'grid' | 'compact'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'large' | 'compact'>(() => {
+    try {
+      const saved = localStorage.getItem('obsidian_vault_view_mode') as any;
+      if (saved === 'grid' || saved === 'large' || saved === 'compact') return saved;
+    } catch {}
+    return (config.defaultViewMode as any) || 'grid';
+  });
+
+  const handleViewModeChange = (mode: 'grid' | 'large' | 'compact') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('obsidian_vault_view_mode', mode);
+    } catch {}
+  };
 
   // Modal & Drawer visibility
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
@@ -923,7 +936,7 @@ export default function App() {
           categoryCounts={categoryCounts}
           totalItemCount={items.length}
           viewMode={viewMode}
-          onViewModeChange={setViewMode}
+          onViewModeChange={handleViewModeChange}
         />
 
         {/* Search Query Feedback Badge */}
@@ -965,8 +978,10 @@ export default function App() {
         ) : (
           <>
             <div className={
-              viewMode === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6 gap-4 sm:gap-6'
+              viewMode === 'large'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-3 gap-6 sm:gap-8'
+                : viewMode === 'grid'
+                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-5 sm:gap-6'
                 : 'space-y-4'
             }>
               {renderedItems.map((item) => {
@@ -979,6 +994,7 @@ export default function App() {
                     user={user}
                     commentCount={commentCountsMap[item.id] || 0}
                     isLiked={userLikedItemIds.has(item.id)}
+                    viewMode={viewMode}
                     onPreview={handleOpenPreview}
                     onLike={handleLikeItem}
                     onRecordView={handleRecordView}
