@@ -1,0 +1,12 @@
+# Allow all crawlers and favicon bots
+User-agent: *
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+Allow: /favicon.ico
+Allow: /favicon.svg
+Allow: /favicon-48x48.png
+Allow: /icon-192.png
+Allow: /icon-512.png
+Allow: /apple-touch-icon.png
