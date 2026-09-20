@@ -54,7 +54,8 @@ import {
   loadSavedFilters,
   saveSavedFilters,
   loadViewMode,
-  saveViewMode
+  saveViewMode,
+  assignSequentialItemNumbers
 } from './utils/storage';
 import { 
   supabase, 
@@ -295,8 +296,9 @@ export default function App() {
               return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             });
 
-            saveItems(combined);
-            return combined;
+            const numbered = assignSequentialItemNumbers(combined);
+            saveItems(numbered);
+            return numbered;
           });
         }
       })
@@ -693,8 +695,9 @@ export default function App() {
         updatedAt: new Date().toISOString(),
       };
       const updated = items.map((i) => (i.id === editingItem.id ? updatedItem : i));
-      setItems(updated);
-      saveItems(updated);
+      const numbered = assignSequentialItemNumbers(updated);
+      setItems(numbered);
+      saveItems(numbered);
       saveItemToSupabase(updatedItem).catch((e) => console.warn('Supabase update sync notice:', e));
       showToast(t.toasts.linkUpdated);
     } else {
@@ -726,8 +729,9 @@ export default function App() {
       };
 
       const updated = [newItem, ...items];
-      setItems(updated);
-      saveItems(updated);
+      const numbered = assignSequentialItemNumbers(updated);
+      setItems(numbered);
+      saveItems(numbered);
       saveItemToSupabase(newItem).catch((e) => console.warn('Supabase insert sync notice:', e));
       showToast(t.toasts.newLinkVaulted);
     }

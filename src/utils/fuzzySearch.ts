@@ -409,12 +409,9 @@ export function intelligentSearch(items: MediaItem[], query: string): Intelligen
     if (targetNumber !== null && itemNum === targetNumber) {
       score += 1000000; // Unbeatable score, appears #1
       reasons.push(`ตรงกับรหัสโพสต์ #${targetNumber} โดยตรง (อันดับ 1)`);
-    } else if (targetNumber !== null && item.id.includes(String(targetNumber))) {
-      score += 500000;
-      reasons.push(`ตรงกับรหัสอ้างอิง ${targetNumber}`);
-    } else if (targetNumber !== null && item.url.includes(String(targetNumber))) {
-      score += 300000;
-      reasons.push(`URL มีรหัสตัวเลข #${targetNumber}`);
+    } else if (targetNumber !== null && (item.id === String(targetNumber) || item.id === `vault-item-${targetNumber}`)) {
+      score += 1000000;
+      reasons.push(`ตรงกับรหัสโพสต์ #${targetNumber} โดยตรง (อันดับ 1)`);
     }
 
     // --- RULE 2: TITLE MATCHING (High weight) ---

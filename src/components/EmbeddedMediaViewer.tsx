@@ -25,6 +25,7 @@ import { useTranslation } from '../context/LanguageContext';
 import { getDomainFromUrl } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
 import { isTwitterOrX, isPixiv, getSafeImageUrl } from '../utils/mediaProxy';
+import { decodeHtmlEntities } from '../utils/text';
 import { TwitterEmbed } from './TwitterEmbed';
 import { PixivViewer } from './PixivViewer';
 
@@ -374,9 +375,9 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
                 <Globe className="w-4 h-4" />
                 <span>{item.siteName || getDomainFromUrl(item.url)}</span>
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-slate-100 leading-snug">{item.title}</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-100 leading-snug">{decodeHtmlEntities(item.title)}</h3>
               {item.description && (
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{item.description}</p>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{decodeHtmlEntities(item.description)}</p>
               )}
               
               <div className="pt-2 flex flex-wrap items-center gap-2 sm:gap-3">
@@ -493,8 +494,8 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
             <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
               {item.mediaType.toUpperCase()}
             </span>
-            <h2 className="text-sm sm:text-base font-bold text-slate-100 truncate" title={item.title}>
-              {item.title}
+            <h2 className="text-sm sm:text-base font-bold text-slate-100 truncate" title={decodeHtmlEntities(item.title)}>
+              {decodeHtmlEntities(item.title)}
             </h2>
           </div>
 

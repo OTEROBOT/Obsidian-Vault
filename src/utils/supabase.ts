@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
+import { decodeHtmlEntities } from './text';
 
 // Supabase configuration with default fallbacks to provided project
 export const SUPABASE_URL =
@@ -99,10 +100,18 @@ export async function checkSupabaseHealth(): Promise<SupabaseStatus> {
 // ----------------------------------------------------
 
 export function mapRowToItem(row: Record<string, any>): MediaItem {
+  const itemNum =
+    typeof row.item_number === 'number'
+      ? row.item_number
+      : typeof row.itemNumber === 'number'
+      ? row.itemNumber
+      : undefined;
+
   return {
     id: row.id,
-    title: row.title || '',
-    description: row.description || '',
+    itemNumber: itemNum,
+    title: decodeHtmlEntities(row.title || ''),
+    description: decodeHtmlEntities(row.description || ''),
     url: row.url || '',
     mediaType: row.media_type || 'web',
     thumbnailUrl: row.thumbnail_url || '',
@@ -127,6 +136,7 @@ export function mapRowToItem(row: Record<string, any>): MediaItem {
 export function mapItemToRow(item: MediaItem): Record<string, any> {
   return {
     id: item.id,
+    item_number: item.itemNumber || null,
     title: item.title,
     description: item.description || '',
     url: item.url,

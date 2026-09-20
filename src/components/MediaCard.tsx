@@ -25,6 +25,7 @@ import { useTranslation } from '../context/LanguageContext';
 import { getDomainFromUrl, safeConfirm } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
 import { isPixiv, isTwitterOrX, getSafeImageUrl, getPixivIllustId } from '../utils/mediaProxy';
+import { decodeHtmlEntities } from '../utils/text';
 
 interface MediaCardProps {
   item: MediaItem;
@@ -72,6 +73,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
   const currentImageFit = imageFitProp ?? localImageFit;
   const displayId = item.itemNumber || 1;
+  const cleanTitle = decodeHtmlEntities(item.title);
+  const cleanDescription = decodeHtmlEntities(item.description);
 
   const handleToggleFit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -400,12 +403,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <h3 
             onClick={() => onPreview(item)}
             className="font-semibold text-slate-100 text-sm leading-snug line-clamp-2 hover:text-cyan-300 transition-colors cursor-pointer flex items-baseline gap-1.5"
-            title={item.title}
+            title={cleanTitle}
           >
             <span className="shrink-0 text-cyan-400 font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/25 select-all">
               #{displayId}
             </span>
-            <span>{item.title}</span>
+            <span>{cleanTitle}</span>
           </h3>
 
           {/* Search match explanation badge */}
@@ -417,9 +420,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           )}
 
           {/* Description */}
-          {item.description && (
+          {cleanDescription && (
             <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
-              {item.description}
+              {cleanDescription}
             </p>
           )}
 

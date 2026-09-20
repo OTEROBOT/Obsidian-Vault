@@ -25,6 +25,7 @@ import { getDomainFromUrl } from '../utils/storage';
 import { extractSmartTags, detectSmartCategory } from '../utils/tagExtractor';
 import { parseUrlSemantics } from '../utils/urlParser';
 import { scrapePageMetadata } from '../utils/webImageScraper';
+import { decodeHtmlEntities } from '../utils/text';
 
 interface AddEditLinkModalProps {
   initialItem?: MediaItem | null;
@@ -50,8 +51,8 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
 
   // Form states
   const [url, setUrl] = useState(initialItem?.url || '');
-  const [title, setTitle] = useState(initialItem?.title || '');
-  const [description, setDescription] = useState(initialItem?.description || '');
+  const [title, setTitle] = useState(() => decodeHtmlEntities(initialItem?.title || ''));
+  const [description, setDescription] = useState(() => decodeHtmlEntities(initialItem?.description || ''));
   const [thumbnailUrl, setThumbnailUrl] = useState(initialItem?.thumbnailUrl || '');
   const [mediaType, setMediaType] = useState<MediaType>(initialItem?.mediaType || 'web');
   const [categoryId, setCategoryId] = useState(initialItem?.categoryId || categories[1]?.id || categories[0]?.id || '');

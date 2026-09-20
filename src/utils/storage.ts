@@ -1,6 +1,7 @@
 import { Category, Comment, MediaItem, SearchFilters, SystemConfig, Tag, UserProfile } from '../types';
 import { DEFAULT_CONFIG, INITIAL_CATEGORIES, INITIAL_COMMENTS, INITIAL_ITEMS, INITIAL_TAGS, INITIAL_USER } from '../data/initialData';
 import { ADMIN_EMAIL } from './supabase';
+import { decodeHtmlEntities } from './text';
 
 const KEYS = {
   ITEMS: 'obsidian_vault_items_v1',
@@ -83,14 +84,43 @@ export function markItemAsDeleted(id: string): void {
   }
 }
 
+/**
+ * Assigns stable, deterministic 1-based sequential item numbers (Post #1, #2, ... #N)
+ * ordered chronologically from oldest (Post #1) to newest (Post #N).
+ * Guarantees every single item in the entire vault has a unique, positive integer ID.
+ */
+export function assignSequentialItemNumbers(items: MediaItem[]): MediaItem[] {
+  if (!items || items.length === 0) return [];
+
+  // Sort items in chronological order: oldest to newest
+  const sorted = [...items].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) return timeA - timeB;
+    return a.id.localeCompare(b.id);
+  });
+
+  // Map each unique item ID to its 1-based position in history
+  const idToNumberMap = new Map<string, number>();
+  sorted.forEach((item, index) => {
+    idToNumberMap.set(item.id, index + 1);
+  });
+
+  return items.map((item) => {
+    const cleanTitle = decodeHtmlEntities(item.title);
+    const cleanDesc = decodeHtmlEntities(item.description);
+    return {
+      ...item,
+      title: cleanTitle,
+      description: cleanDesc,
+      itemNumber: idToNumberMap.get(item.id) || 1,
+    };
+  });
+}
+
 export function ensureItemNumber(item: MediaItem, existingItems?: MediaItem[]): number {
   if (typeof item.itemNumber === 'number' && item.itemNumber > 0) {
     return item.itemNumber;
-  }
-  const match = item.id.match(/\d+/);
-  if (match) {
-    const num = parseInt(match[0], 10);
-    if (!isNaN(num) && num > 0 && num < 1000000) return num;
   }
   if (existingItems && existingItems.length > 0) {
     const max = Math.max(0, ...existingItems.map((i) => i.itemNumber || 0));
@@ -115,26 +145,12 @@ export function loadItems(): MediaItem[] {
       }
     }
 
-    // Ensure all items have stable numeric itemNumber
-    let highestAssigned = 0;
-    parsedList.forEach((it) => {
-      if (typeof it.itemNumber === 'number' && it.itemNumber > highestAssigned) {
-        highestAssigned = it.itemNumber;
-      }
-    });
-
-    const assigned = parsedList.map((item) => {
-      if (typeof item.itemNumber === 'number' && item.itemNumber > 0) {
-        return item;
-      }
-      highestAssigned += 1;
-      return { ...item, itemNumber: highestAssigned };
-    });
-
+    // Assign clean sequential numbers and decode HTML entities
+    const assigned = assignSequentialItemNumbers(parsedList);
     return assigned;
   } catch (e) {
     console.error('Failed to load items from storage:', e);
-    return INITIAL_ITEMS;
+    return assignSequentialItemNumbers(INITIAL_ITEMS);
   }
 }
 
