@@ -62,6 +62,7 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [previewDevice, setPreviewDevice] = useState<'pc' | 'ipad' | 'mobile'>('pc');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Active slide being edited
   const activeSlide = slides.find((s) => s.id === activeSlideId) || slides[0];
@@ -249,8 +250,6 @@ export const BannerSlideEditor: React.FC<BannerSlideEditorProps> = ({
       positionY: Math.round(clickY),
     });
   };
-
-  const [isSaving, setIsSaving] = useState(false);
 
   // Save all visual slider settings to system config and synchronize across all devices
   const handleSaveAll = async () => {

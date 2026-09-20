@@ -38,7 +38,36 @@ export const RecentlyViewedDrawer: React.FC<RecentlyViewedDrawerProps> = ({
   const { t, language } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
 
-  if (!isOpen) return null;
+  // Map records to full media items with strict item existence verification
+  const itemsMap = useMemo(() => new Map<string, MediaItem>(allItems.map((i) => [i.id, i])), [allItems]);
+  
+  // Intelligent resolution: map records preserving exact chronological order and accurate view frequency
+  const mappedRecentItems = useMemo(() => {
+    return recentRecords
+      .map((record) => {
+        const item = itemsMap.get(record.itemId);
+        if (!item) return null;
+        return {
+          item,
+          viewedAt: record.viewedAt,
+          viewCount: typeof record.viewCount === 'number' && record.viewCount > 0 ? record.viewCount : 1,
+        };
+      })
+      .filter(Boolean) as { item: MediaItem; viewedAt: string; viewCount: number }[];
+  }, [recentRecords, itemsMap]);
+
+  // Quick search filter within recently viewed history
+  const filteredRecentItems = useMemo(() => {
+    if (!searchQuery.trim()) return mappedRecentItems;
+    const q = searchQuery.toLowerCase().trim();
+    return mappedRecentItems.filter(({ item }) => {
+      const titleMatch = item.title.toLowerCase().includes(q);
+      const descMatch = (item.description || '').toLowerCase().includes(q);
+      const siteMatch = (item.siteName || '').toLowerCase().includes(q);
+      const tagMatch = (item.tags || []).some((tag) => tag.toLowerCase().includes(q));
+      return titleMatch || descMatch || siteMatch || tagMatch;
+    });
+  }, [mappedRecentItems, searchQuery]);
 
   function formatRelativeTime(isoString: string): string {
     try {
@@ -75,36 +104,7 @@ export const RecentlyViewedDrawer: React.FC<RecentlyViewedDrawerProps> = ({
     return `Viewed ${count} ${count === 1 ? 'time' : 'times'}`;
   }
 
-  // Map records to full media items with strict item existence verification
-  const itemsMap = new Map<string, MediaItem>(allItems.map((i) => [i.id, i]));
-  
-  // Intelligent resolution: map records preserving exact chronological order and accurate view frequency
-  const mappedRecentItems = useMemo(() => {
-    return recentRecords
-      .map((record) => {
-        const item = itemsMap.get(record.itemId);
-        if (!item) return null;
-        return {
-          item,
-          viewedAt: record.viewedAt,
-          viewCount: typeof record.viewCount === 'number' && record.viewCount > 0 ? record.viewCount : 1,
-        };
-      })
-      .filter(Boolean) as { item: MediaItem; viewedAt: string; viewCount: number }[];
-  }, [recentRecords, allItems]);
-
-  // Quick search filter within recently viewed history
-  const filteredRecentItems = useMemo(() => {
-    if (!searchQuery.trim()) return mappedRecentItems;
-    const q = searchQuery.toLowerCase().trim();
-    return mappedRecentItems.filter(({ item }) => {
-      const titleMatch = item.title.toLowerCase().includes(q);
-      const descMatch = (item.description || '').toLowerCase().includes(q);
-      const siteMatch = (item.siteName || '').toLowerCase().includes(q);
-      const tagMatch = (item.tags || []).some((tag) => tag.toLowerCase().includes(q));
-      return titleMatch || descMatch || siteMatch || tagMatch;
-    });
-  }, [mappedRecentItems, searchQuery]);
+  if (!isOpen) return null;
 
   return (
     <div 

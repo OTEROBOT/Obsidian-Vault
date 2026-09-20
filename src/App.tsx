@@ -81,6 +81,7 @@ import { AuthModal } from './components/AuthModal';
 import { MobileDrawer } from './components/MobileDrawer';
 import { BottomNavBar } from './components/BottomNavBar';
 import { HeroBanner } from './components/HeroBanner';
+import { ScrollNavigation } from './components/ScrollNavigation';
 import { useTranslation } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 
@@ -435,6 +436,12 @@ export default function App() {
       // Pinned items always rise to the top unless specifically sorting differently
       if (a.isPinned !== b.isPinned) {
         return a.isPinned ? -1 : 1;
+      }
+
+      // When search query is active and default sort ('newest') is active,
+      // preserve fuzzy relevance score order!
+      if (filters.query.trim() && filters.sortBy === 'newest') {
+        return 0;
       }
 
       switch (filters.sortBy) {
@@ -1160,25 +1167,32 @@ export default function App() {
       )}
 
       {/* Recently Viewed Links Drawer */}
-      <RecentlyViewedDrawer
-        isOpen={isRecentOpen}
-        onClose={() => setIsRecentOpen(false)}
-        recentRecords={validRecentRecords}
-        allItems={items}
-        onPreview={handleOpenPreview}
-        onRecordView={handleRecordView}
-        onRemoveItem={handleRemoveRecentItem}
-        onClearHistory={handleClearHistory}
-      />
+      {isRecentOpen && (
+        <RecentlyViewedDrawer
+          isOpen={isRecentOpen}
+          onClose={() => setIsRecentOpen(false)}
+          recentRecords={validRecentRecords}
+          allItems={items}
+          onPreview={handleOpenPreview}
+          onRecordView={handleRecordView}
+          onRemoveItem={handleRemoveRecentItem}
+          onClearHistory={handleClearHistory}
+        />
+      )}
 
       {/* Identity / Authentication Modal */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        currentUser={user}
-        onLogin={handleLogin}
-        onLogout={handleLogout}
-      />
+      {isAuthOpen && (
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+          currentUser={user}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {/* Floating Scroll Navigation (Scroll to Top / Scroll to Bottom) */}
+      <ScrollNavigation />
 
     </div>
   );

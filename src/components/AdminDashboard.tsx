@@ -112,6 +112,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
+  // Visual Branding State
+  const [logoUrlInput, setLogoUrlInput] = useState(config.logoUrl || '');
+  const [faviconUrlInput, setFaviconUrlInput] = useState(config.faviconUrl || '');
+  const [bannerBgUrlInput, setBannerBgUrlInput] = useState(config.bannerBgUrl || '');
+  const [bannerTitleInput, setBannerTitleInput] = useState(config.bannerTitle || config.vaultName || '');
+  const [bannerSubtitleInput, setBannerSubtitleInput] = useState(config.bannerSubtitle || config.vaultTagline || '');
+  const [bannerBadgeInput, setBannerBadgeInput] = useState(config.bannerBadge || 'คลังไซเบอร์ความเร็วสูง');
+  const [bannerOverlayOpacityInput, setBannerOverlayOpacityInput] = useState(config.bannerOverlayOpacity ?? 0.75);
+  const [showBannerInput, setShowBannerInput] = useState(config.showBanner !== false);
+  const [syncFaviconWithLogo, setSyncFaviconWithLogo] = useState(true);
+
+  // Upload loading states
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+
+  // New Category State
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatSlug, setNewCatSlug] = useState('');
+  const [newCatColor, setNewCatColor] = useState('#22d3ee');
+  const [newCatIcon, setNewCatIcon] = useState('Compass');
+
+  // Taxonomy Edit State
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
+
+  // New Tag State
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#38bdf8');
+
+  // Config editing state
+  const [vaultNameInput, setVaultNameInput] = useState(config.vaultName);
+  const [vaultTaglineInput, setVaultTaglineInput] = useState(config.vaultTagline);
+  const [allowGuestComments, setAllowGuestComments] = useState(config.allowGuestComments);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+
   const isRealAdmin = currentUser?.isLoggedIn && currentUser?.role === 'admin' && currentUser?.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
 
   if (!isOpen) return null;
@@ -215,42 +251,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1600&q=80',
     },
   ];
-
-  // Visual Branding State
-  const [logoUrlInput, setLogoUrlInput] = useState(config.logoUrl || '');
-  const [faviconUrlInput, setFaviconUrlInput] = useState(config.faviconUrl || '');
-  const [bannerBgUrlInput, setBannerBgUrlInput] = useState(config.bannerBgUrl || '');
-  const [bannerTitleInput, setBannerTitleInput] = useState(config.bannerTitle || config.vaultName || '');
-  const [bannerSubtitleInput, setBannerSubtitleInput] = useState(config.bannerSubtitle || config.vaultTagline || '');
-  const [bannerBadgeInput, setBannerBadgeInput] = useState(config.bannerBadge || 'คลังไซเบอร์ความเร็วสูง');
-  const [bannerOverlayOpacityInput, setBannerOverlayOpacityInput] = useState(config.bannerOverlayOpacity ?? 0.75);
-  const [showBannerInput, setShowBannerInput] = useState(config.showBanner !== false);
-  const [syncFaviconWithLogo, setSyncFaviconWithLogo] = useState(true);
-
-  // Upload loading states
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [uploadingBanner, setUploadingBanner] = useState(false);
-  const [uploadingFavicon, setUploadingFavicon] = useState(false);
-
-  // New Category State
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatSlug, setNewCatSlug] = useState('');
-  const [newCatColor, setNewCatColor] = useState('#22d3ee');
-  const [newCatIcon, setNewCatIcon] = useState('Compass');
-
-  // Taxonomy Edit State
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [editingTag, setEditingTag] = useState<Tag | null>(null);
-
-  // New Tag State
-  const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('#38bdf8');
-
-  // Config editing state
-  const [vaultNameInput, setVaultNameInput] = useState(config.vaultName);
-  const [vaultTaglineInput, setVaultTaglineInput] = useState(config.vaultTagline);
-  const [allowGuestComments, setAllowGuestComments] = useState(config.allowGuestComments);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   // Handle uploading image files (Supabase Storage with automatic Data URL fallback)
   const handleUploadImage = async (file: File, target: 'logo' | 'banner' | 'favicon') => {
