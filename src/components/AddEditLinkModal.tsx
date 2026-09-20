@@ -404,6 +404,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
       title: title.trim(),
       description: description.trim(),
       url: finalUrl,
+      itemNumber: initialItem?.itemNumber,
       mediaType,
       thumbnailUrl: thumbnailUrl.trim() || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
       mediaUrl: activeTab === 'upload' ? localMediaUrl : undefined,
@@ -434,8 +435,13 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#090a0f]/90">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-            <h3 className="text-base font-bold text-slate-100 font-display tracking-wide">
-              {isEditing ? 'EDIT VAULT ENTRY' : 'NEW OBSIDIAN LINK & MEDIA'}
+            <h3 className="text-base font-bold text-slate-100 font-display tracking-wide flex items-center gap-2">
+              <span>{isEditing ? 'EDIT VAULT ENTRY' : 'NEW OBSIDIAN LINK & MEDIA'}</span>
+              {isEditing && initialItem?.itemNumber && (
+                <span className="px-2 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-300 font-mono font-bold text-xs border border-cyan-500/30">
+                  #{initialItem.itemNumber}
+                </span>
+              )}
             </h3>
           </div>
           <button

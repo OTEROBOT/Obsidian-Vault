@@ -16,7 +16,9 @@ import {
   Copy, 
   Check, 
   Eye, 
-  HardDrive
+  HardDrive,
+  Hash,
+  Sparkles
 } from 'lucide-react';
 import { Category, MediaItem, UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -32,6 +34,7 @@ interface MediaCardProps {
   isLiked?: boolean;
   viewMode?: 'grid' | 'large' | 'compact';
   imageFit?: 'cover' | 'contain';
+  matchReason?: string;
   onToggleImageFit?: (itemId: string, newFit: 'cover' | 'contain') => void;
   onPreview: (item: MediaItem) => void;
   onLike: (itemId: string) => void;
@@ -50,6 +53,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   isLiked = false,
   viewMode = 'grid',
   imageFit: imageFitProp,
+  matchReason,
   onToggleImageFit,
   onPreview,
   onLike,
@@ -61,11 +65,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [idCopied, setIdCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [localImageFit, setLocalImageFit] = useState<'cover' | 'contain'>(item.imageFit || 'cover');
 
   const currentImageFit = imageFitProp ?? localImageFit;
+  const displayId = item.itemNumber || 1;
 
   const handleToggleFit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -81,6 +87,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     navigator.clipboard.writeText(item.url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyId = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(`#${displayId}`);
+    setIdCopied(true);
+    setTimeout(() => setIdCopied(false), 2000);
   };
 
   const getMediaTypeBadge = () => {
@@ -210,13 +223,32 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         {/* Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#090a0f] via-transparent to-black/30 pointer-events-none z-10" />
 
-        {/* Top-Left Pinned Badge */}
-        {item.isPinned && (
-          <div className="absolute top-3 left-3 z-30 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-mono shadow-md card-badge">
-            <Pin className="w-3 h-3 fill-current" />
-            <span>{t.card.pinned}</span>
-          </div>
-        )}
+        {/* Top-Left Badges: Post ID Tag (#45) & Pinned Tag */}
+        <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 flex-wrap">
+          {/* Cyberpunk Post ID Badge */}
+          <button
+            type="button"
+            onClick={handleCopyId}
+            className="group/id flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/80 hover:bg-black/95 text-cyan-300 hover:text-cyan-200 border border-cyan-500/40 hover:border-cyan-400 text-[11px] font-mono font-bold shadow-[0_4px_12px_rgba(0,0,0,0.6)] backdrop-blur-md transition-all active:scale-95 cursor-pointer touch-target select-none"
+            title={`รหัสโพสต์ #${displayId} (คลิกเพื่อคัดลอกรหัส)`}
+            aria-label={`Post ID #${displayId}`}
+          >
+            <Hash className="w-3 h-3 text-cyan-400 group-hover/id:rotate-12 transition-transform" />
+            <span>{displayId}</span>
+            {idCopied ? (
+              <Check className="w-3 h-3 text-emerald-400 animate-in fade-in" />
+            ) : (
+              <Copy className="w-2.5 h-2.5 text-cyan-400/60 opacity-0 group-hover/id:opacity-100 transition-opacity" />
+            )}
+          </button>
+
+          {item.isPinned && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-mono shadow-md card-badge">
+              <Pin className="w-3 h-3 fill-current" />
+              <span>{t.card.pinned}</span>
+            </div>
+          )}
+        </div>
 
         {/* Top-Right Quick Overlay Controls: Image Fit Toggle & Admin Menu */}
         <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5">
@@ -367,11 +399,22 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           {/* Title */}
           <h3 
             onClick={() => onPreview(item)}
-            className="font-semibold text-slate-100 text-sm leading-snug line-clamp-2 hover:text-cyan-300 transition-colors cursor-pointer"
+            className="font-semibold text-slate-100 text-sm leading-snug line-clamp-2 hover:text-cyan-300 transition-colors cursor-pointer flex items-baseline gap-1.5"
             title={item.title}
           >
-            {item.title}
+            <span className="shrink-0 text-cyan-400 font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/25 select-all">
+              #{displayId}
+            </span>
+            <span>{item.title}</span>
           </h3>
+
+          {/* Search match explanation badge */}
+          {matchReason && (
+            <div className="mt-1 flex items-center gap-1 text-[10px] sm:text-[11px] font-mono text-cyan-300/90 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/25">
+              <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+              <span className="truncate">{matchReason}</span>
+            </div>
+          )}
 
           {/* Description */}
           {item.description && (

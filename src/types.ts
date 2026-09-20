@@ -13,6 +13,7 @@ export type EmbedType = 'none' | 'youtube' | 'vimeo' | 'html5_video' | 'audio' |
 
 export interface MediaItem {
   id: string;
+  itemNumber?: number; // Sequential display post ID (e.g. 1, 2, 45, 4829)
   title: string;
   description: string;
   url: string;

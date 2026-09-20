@@ -239,7 +239,7 @@ export const translations: Record<Language, TranslationSchema> = {
     },
     nav: {
       brandTagline: 'Cyber-Dark Media & Link Vault',
-      searchPlaceholder: 'Search links, tags, descriptions...',
+      searchPlaceholder: 'Search by title, tag, URL, or #ID (e.g. #45)...',
       searchKbd: '⌘K',
       recent: 'Recent',
       admin: 'Admin Nexus',
@@ -451,7 +451,7 @@ export const translations: Record<Language, TranslationSchema> = {
     },
     nav: {
       brandTagline: 'คลังลิงก์และสื่อมัลติมีเดียสไตล์ไซเบอร์',
-      searchPlaceholder: 'ค้นหาลิงก์ แท็ก คำอธิบาย...',
+      searchPlaceholder: 'ค้นหาด้วยชื่อ, แท็ก, หรือรหัสโพสต์ เช่น #45 หรือ 45...',
       searchKbd: '⌘K',
       recent: 'ดูล่าสุด',
       admin: 'ระบบผู้ดูแล',

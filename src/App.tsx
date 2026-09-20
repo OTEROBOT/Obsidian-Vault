@@ -77,7 +77,7 @@ import {
   ADMIN_EMAIL
 } from './utils/supabase';
 import { INITIAL_USER, INITIAL_ITEMS } from './data/initialData';
-import { fuzzySearchMedia } from './utils/fuzzySearch';
+import { fuzzySearchMedia, intelligentSearch, IntelligentSearchResult } from './utils/fuzzySearch';
 import { Navbar } from './components/Navbar';
 import { FilterBar } from './components/FilterBar';
 import { MediaCard } from './components/MediaCard';
@@ -445,14 +445,21 @@ export default function App() {
     };
   }, []);
 
+  // Intelligent Google-grade Search Memo (includes ID priority, typo correction, keyboard converter)
+  const searchResult: IntelligentSearchResult = useMemo(() => {
+    if (!filters.query.trim()) {
+      return {
+        items,
+        matchReasons: {},
+        totalMatches: items.length,
+      };
+    }
+    return intelligentSearch(items, filters.query.trim());
+  }, [items, filters.query]);
+
   // Filtered & Fuzzy Searched Items Memo
   const filteredItems = useMemo(() => {
-    let result = [...items];
-
-    // 1. Fuzzy query filter
-    if (filters.query.trim()) {
-      result = fuzzySearchMedia(result, filters.query.trim());
-    }
+    let result = filters.query.trim() ? [...searchResult.items] : [...items];
 
     // 2. Category filter
     if (filters.categoryId !== 'all' && filters.categoryId !== 'cat-all') {
@@ -476,15 +483,21 @@ export default function App() {
 
     // 6. Sorting logic
     result.sort((a, b) => {
-      // Pinned items always rise to the top unless specifically sorting differently
-      if (a.isPinned !== b.isPinned) {
-        return a.isPinned ? -1 : 1;
+      // If user typed an exact ID number (e.g. 45 or #45), that card ALWAYS stays #1 at top!
+      if (searchResult.exactIdMatch) {
+        if (a.id === searchResult.exactIdMatch.id) return -1;
+        if (b.id === searchResult.exactIdMatch.id) return 1;
       }
 
       // When search query is active and default sort ('newest') is active,
-      // preserve fuzzy relevance score order!
+      // preserve intelligent relevance score order!
       if (filters.query.trim() && filters.sortBy === 'newest') {
         return 0;
+      }
+
+      // In normal view without search query, pinned items rise to the top
+      if (!filters.query.trim() && a.isPinned !== b.isPinned) {
+        return a.isPinned ? -1 : 1;
       }
 
       switch (filters.sortBy) {
@@ -504,7 +517,7 @@ export default function App() {
     });
 
     return result;
-  }, [items, filters]);
+  }, [items, filters, searchResult]);
 
   // Virtualized progressive windowing for 60-120 FPS rendering on Safari & iPad
   const [visibleCount, setVisibleCount] = useState(18);
@@ -676,6 +689,7 @@ export default function App() {
       const updatedItem: MediaItem = {
         ...editingItem,
         ...data,
+        itemNumber: editingItem.itemNumber || data.itemNumber || 1,
         updatedAt: new Date().toISOString(),
       };
       const updated = items.map((i) => (i.id === editingItem.id ? updatedItem : i));
@@ -684,9 +698,11 @@ export default function App() {
       saveItemToSupabase(updatedItem).catch((e) => console.warn('Supabase update sync notice:', e));
       showToast(t.toasts.linkUpdated);
     } else {
-      // Create new
+      // Create new with sequential itemNumber
+      const nextItemNumber = Math.max(0, ...items.map((i) => i.itemNumber || 0)) + 1;
       const newItem: MediaItem = {
         id: `vault-item-${Date.now()}`,
+        itemNumber: data.itemNumber || nextItemNumber,
         title: data.title || 'Untitled Bookmark',
         description: data.description || '',
         url: data.url || '',
@@ -991,13 +1007,71 @@ export default function App() {
           onToggleAllCardsImageFit={handleToggleAllCardsImageFit}
         />
 
-        {/* Search Query Feedback Badge */}
-        {filters.query && (
-          <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs text-cyan-300">
-            <span>
-              {t.filters.searchResultsFor} <strong className="font-mono text-white">"{filters.query}"</strong>
-            </span>
-            <span className="font-mono">({filteredItems.length} {t.filters.matchesFound})</span>
+        {/* Intelligent Search Feedback Bar: ID Match, Did-you-mean, Auto-correct, and Typo Handling */}
+        {filters.query.trim() && (
+          <div className="rounded-2xl bg-[#0d131f]/90 border border-cyan-500/30 p-3 sm:p-4 text-xs space-y-2 backdrop-blur-md shadow-lg animate-in fade-in slide-in-from-top-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 animate-pulse" />
+                <span className="text-slate-300">
+                  {t.filters.searchResultsFor}{' '}
+                  <strong className="font-mono text-cyan-200 font-semibold bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                    "{filters.query}"
+                  </strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-cyan-400 font-medium">
+                  {filteredItems.length} {t.filters.matchesFound}
+                </span>
+                <button
+                  onClick={() => setFilters({ ...filters, query: '' })}
+                  className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                >
+                  ล้างค้นหา
+                </button>
+              </div>
+            </div>
+
+            {/* Exact ID Match Notification */}
+            {searchResult.exactIdMatch && (
+              <div className="flex items-center gap-2 pt-1 border-t border-white/5 text-[11px] sm:text-xs text-emerald-300 font-mono">
+                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold">
+                  🎯 รหัส #{searchResult.exactIdMatch.itemNumber}
+                </span>
+                <span className="truncate">
+                  พบการ์ดตรงกับรหัสโพสต์ #{searchResult.exactIdMatch.itemNumber} นำขึ้นแสดงเป็นอันดับ 1 ทันที
+                </span>
+              </div>
+            )}
+
+            {/* Google-grade "Did you mean?" suggestion */}
+            {searchResult.suggestedQuery && !searchResult.isAutoCorrected && (
+              <div className="flex items-center gap-2 pt-1 border-t border-white/5 text-xs text-amber-300">
+                <span>คุณหมายถึง:</span>
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...filters, query: searchResult.suggestedQuery! })}
+                  className="font-bold underline text-cyan-300 hover:text-cyan-200 transition-colors cursor-pointer"
+                >
+                  {searchResult.suggestedQuery}
+                </button>
+                <span className="text-slate-400">ใช่หรือไม่?</span>
+              </div>
+            )}
+
+            {/* Auto-corrected fallback notification */}
+            {searchResult.isAutoCorrected && searchResult.suggestedQuery && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/5 text-xs text-slate-300">
+                <span className="text-cyan-300">แสดงผลลัพธ์ใกล้เคียงสำหรับ:</span>
+                <strong className="font-bold text-cyan-200 font-mono">
+                  {searchResult.suggestedQuery}
+                </strong>
+                <span className="text-slate-400">
+                  (ไม่พบคำว่า "{filters.query}" ตรงตัว จึงค้นหาคำที่ใกล้เคียงที่สุดให้โดยอัตโนมัติ)
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1049,6 +1123,7 @@ export default function App() {
                     isLiked={userLikedItemIds.has(item.id)}
                     viewMode={viewMode}
                     imageFit={itemImageFit}
+                    matchReason={searchResult.matchReasons[item.id]}
                     onToggleImageFit={handleToggleCardImageFit}
                     onPreview={handleOpenPreview}
                     onLike={handleLikeItem}

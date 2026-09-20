@@ -487,6 +487,9 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
         {/* Top Header Bar */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10 flex items-center justify-between gap-3 bg-[#090a0f]/90">
           <div className="flex items-center gap-2.5 truncate">
+            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0 select-all shadow-sm">
+              #{item.itemNumber || 1}
+            </span>
             <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
               {item.mediaType.toUpperCase()}
             </span>

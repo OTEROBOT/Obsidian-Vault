@@ -23,6 +23,7 @@ export const INITIAL_TAGS: Tag[] = [
 export const INITIAL_ITEMS: MediaItem[] = [
   {
     id: 'vault-item-1',
+    itemNumber: 1,
     title: 'Ghost in the Shell: Stand Alone Complex 4K Cyber Aesthetics',
     description: 'Deconstructing the cybernetic philosophy, tachikoma interfaces, and neo-Tokyo urban architectural density.',
     url: 'https://www.youtube.com/watch?v=q0z08g-aE10',
@@ -43,6 +44,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-2',
+    itemNumber: 2,
     title: 'Deep Mind Neural Architectures & Gemini 2.0 Breakthroughs',
     description: 'Comprehensive research breakdown of transformer-based multi-modal reasoning, active context compression, and symbolic code engines.',
     url: 'https://deepmind.google/technologies/gemini/',
@@ -62,6 +64,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-3',
+    itemNumber: 3,
     title: 'Cyber Tunnel High-Tech Loop (Direct 60FPS Video)',
     description: 'Infinite cyber matrix wireframe tunnel render with glowing neon chromatic aberration and geometric distortion.',
     url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
@@ -82,6 +85,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-4',
+    itemNumber: 4,
     title: 'Neon Dystopia: Dark Ambient Modular Synth Session',
     description: 'Eurorack analog synthesizer patch with generative reverb, low-pass filter sweeps, and sub-bass resonance.',
     url: 'https://actions.google.com/sounds/v1/science_fiction/deep_space_drone.ogg',
@@ -102,6 +106,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-5',
+    itemNumber: 5,
     title: 'Supabase & PostgreSQL Row Level Security (RLS) Masterclass',
     description: 'Detailed security patterns for multi-tenant isolation, JWT claims inspection, and high-throughput indexed search.',
     url: 'https://supabase.com/docs/guides/auth/row-level-security',
@@ -120,6 +125,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-6',
+    itemNumber: 6,
     title: 'Neo-Tokyo Megacity Terminal Interface (Direct Concept Artwork)',
     description: 'High resolution digital matte painting and heads-up display rendering with holographic typography and glyph overlays.',
     url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1800&q=85',
@@ -140,6 +146,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-7',
+    itemNumber: 7,
     title: 'The Future of Web Performance: Vite, Turbopack, and Edge Runtimes',
     description: 'Exploring cold-start optimizations, bundle elimination via HTTP/3 multiplexing, and server component serialization benchmarks.',
     url: 'https://vite.dev/guide/why.html',
@@ -158,6 +165,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-8',
+    itemNumber: 8,
     title: 'Blade Runner 2049 Sound Design & Vangelis Homage (Trailer Reel)',
     description: 'Cinematic trailer breakdown showcasing Hans Zimmer and Benjamin Wallfisch Yamaha CS-80 brass blasts.',
     url: 'https://www.youtube.com/watch?v=gCcx85zbxz4',
@@ -177,7 +185,8 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-pixiv',
-    title: 'ヒナアコ - 하우디 Howdii',
+    itemNumber: 9,
+    title: 'ヒナアコ - 하우ดี Howdii',
     description: 'High-resolution anime illustration from Pixiv with multi-page album support and anti-403 media proxy.',
     url: 'https://www.pixiv.net/artworks/115598114',
     mediaType: 'image',
@@ -196,6 +205,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
   },
   {
     id: 'vault-item-twitter',
+    itemNumber: 10,
     title: 'Post by @jack on X',
     description: 'Iconic first post on X: "just setting up my twttr" - rendered with live interactive X oEmbed widget.',
     url: 'https://x.com/jack/status/20',

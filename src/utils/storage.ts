@@ -83,18 +83,55 @@ export function markItemAsDeleted(id: string): void {
   }
 }
 
+export function ensureItemNumber(item: MediaItem, existingItems?: MediaItem[]): number {
+  if (typeof item.itemNumber === 'number' && item.itemNumber > 0) {
+    return item.itemNumber;
+  }
+  const match = item.id.match(/\d+/);
+  if (match) {
+    const num = parseInt(match[0], 10);
+    if (!isNaN(num) && num > 0 && num < 1000000) return num;
+  }
+  if (existingItems && existingItems.length > 0) {
+    const max = Math.max(0, ...existingItems.map((i) => i.itemNumber || 0));
+    return max + 1;
+  }
+  return 1;
+}
+
 export function loadItems(): MediaItem[] {
   try {
     const raw = storage.getItem(KEYS.ITEMS);
     const deleted = getDeletedItemIds();
+    let parsedList: MediaItem[] = [];
     if (raw === null) {
-      return INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
+      parsedList = INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
+    } else {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsedList = parsed.filter((i) => !deleted.has(i.id));
+      } else {
+        parsedList = INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
+      }
     }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((i) => !deleted.has(i.id));
-    }
-    return INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
+
+    // Ensure all items have stable numeric itemNumber
+    let highestAssigned = 0;
+    parsedList.forEach((it) => {
+      if (typeof it.itemNumber === 'number' && it.itemNumber > highestAssigned) {
+        highestAssigned = it.itemNumber;
+      }
+    });
+
+    const assigned = parsedList.map((item) => {
+      if (typeof item.itemNumber === 'number' && item.itemNumber > 0) {
+        return item;
+      }
+      highestAssigned += 1;
+      return { ...item, itemNumber: highestAssigned };
+    });
+
+    return assigned;
   } catch (e) {
     console.error('Failed to load items from storage:', e);
     return INITIAL_ITEMS;

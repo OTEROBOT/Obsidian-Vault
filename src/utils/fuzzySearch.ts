@@ -1,10 +1,33 @@
 import { MediaItem } from '../types';
 
 /**
- * Normalizes text for typo-tolerant, case-insensitive, and accent-insensitive matching.
- * Also cleans Thai diacritics / tone marks for phonetic fallback.
+ * Bidirectional QWERTY <-> Thai Kedmanee Keyboard mapping
+ * Fixes accidental language layout slips (e.g. 'ัสนะีิำ' -> 'youtube', 'giy\'g' -> 'เพลง')
  */
-function normalizeText(text: string): string {
+const EN_QWERTY = "1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?";
+const TH_KEDMANEE = "ๅ/-ภถุึคตจขชๆไำพะัีรนยบลฃฟหกดเ้่าสวงผปแอิืทมใฝ+๑๒๓๔ู฿๕๖๗๘๙๐\"ฎฑธํ๊ณฯญีฐ,ฤฆฏโฌ็๋ษศศซ.?()ฉฮฺ์?ฒฬฦ";
+
+export function convertKeyboardLayout(text: string): { enToTh: string; thToEn: string } {
+  let enToTh = '';
+  let thToEn = '';
+
+  for (const char of text) {
+    // EN -> TH
+    const enIdx = EN_QWERTY.indexOf(char);
+    enToTh += enIdx !== -1 && enIdx < TH_KEDMANEE.length ? TH_KEDMANEE[enIdx] : char;
+
+    // TH -> EN
+    const thIdx = TH_KEDMANEE.indexOf(char);
+    thToEn += thIdx !== -1 && thIdx < EN_QWERTY.length ? EN_QWERTY[thIdx] : char;
+  }
+
+  return { enToTh, thToEn };
+}
+
+/**
+ * Normalizes text for typo-tolerant, case-insensitive, and accent-insensitive matching.
+ */
+export function normalizeText(text: string): string {
   if (!text) return '';
   return text
     .toLowerCase()
@@ -14,10 +37,9 @@ function normalizeText(text: string): string {
 }
 
 /**
- * Remove Thai tone marks and short vowel marks for phonetic typo-tolerance
+ * Remove Thai tone marks and vowel marks for phonetic typo-tolerance
  */
-function stripThaiDiacritics(text: string): string {
-  // \u0e31 (mai han-akat), \u0e34-\u0e39 (sara i, ii, ue, uee, u, uu), \u0e47-\u0e4e (mai tai khu, tone marks, thanthakhat)
+export function stripThaiDiacritics(text: string): string {
   return text.replace(/[\u0e31\u0e34-\u0e39\u0e47-\u0e4e]/g, '');
 }
 
@@ -25,7 +47,7 @@ function stripThaiDiacritics(text: string): string {
  * Damerau-Levenshtein distance calculating insertions, deletions, substitutions,
  * and character transpositions (e.g., 'teh' -> 'the', 'spofity' -> 'spotify').
  */
-function damerauLevenshtein(a: string, b: string): number {
+export function damerauLevenshtein(a: string, b: string): number {
   const al = a.length;
   const bl = b.length;
   if (!al) return bl;
@@ -58,10 +80,7 @@ function damerauLevenshtein(a: string, b: string): number {
 }
 
 /**
- * Fuzzy Subsequence Matching (FZF / VS Code style):
- * Determines if characters of the query appear in order in the target text.
- * Gives bonuses for compactness, consecutive runs, and word boundary matches.
- * Example: 'chrar' matches 'cherachera' because c-h-...-r-a-...-r appear in sequence!
+ * Fuzzy Subsequence Matching (FZF / VS Code style)
  */
 function subsequenceScore(query: string, target: string): number {
   if (!query || !target || query.length > target.length) return 0;
@@ -86,19 +105,17 @@ function subsequenceScore(query: string, target: string): number {
     ti++;
   }
 
-  if (qi < query.length) return 0; // Not a complete subsequence
+  if (qi < query.length) return 0;
 
   const span = matchIndices[matchIndices.length - 1] - matchIndices[0] + 1;
-  const compactness = query.length / span; // 1.0 = adjacent
+  const compactness = query.length / span;
   const startBonus = matchIndices[0] === 0 ? 15 : Math.max(0, 10 - matchIndices[0]);
 
   return Math.min(80, Math.round(32 * compactness + consecutiveBonus + startBonus));
 }
 
 /**
- * Sliding Window Distance:
- * Evaluates the query against substrings of the target with similar length.
- * Tolerates typos within large words or sentences.
+ * Sliding Window Distance for substring typo tolerance
  */
 function slidingWindowSimilarity(query: string, target: string): number {
   const qLen = query.length;
@@ -127,8 +144,7 @@ function slidingWindowSimilarity(query: string, target: string): number {
 }
 
 /**
- * Sorensen-Dice Bigram Similarity:
- * Measures lexical overlap regardless of small insertions or deletions.
+ * Sorensen-Dice Bigram Similarity
  */
 function bigramSimilarity(a: string, b: string): number {
   if (a.length < 2 || b.length < 2) return 0;
@@ -157,11 +173,9 @@ function bigramSimilarity(a: string, b: string): number {
 }
 
 /**
- * Computes comprehensive fuzzy relevance score between query and a single target string.
- * Combines exact, prefix, substring, subsequence, sliding-window edit distance,
- * consonant skeleton, and bigram similarity.
+ * Computes deep fuzzy score between single query and target string
  */
-function computeIntelligentScore(query: string, target: string): number {
+export function computeIntelligentScore(query: string, target: string): number {
   if (!query || !target) return 0;
 
   const q = normalizeText(query);
@@ -179,7 +193,7 @@ function computeIntelligentScore(query: string, target: string): number {
     return Math.max(60, 80 - Math.min(subIdx, 20));
   }
 
-  // 4. Subsequence score (e.g. 'chrar' in 'cherachera')
+  // 4. Subsequence score
   const subseq = subsequenceScore(q, t);
 
   // 5. Sliding window Damerau-Levenshtein similarity
@@ -190,7 +204,7 @@ function computeIntelligentScore(query: string, target: string): number {
   const bgSim = bigramSimilarity(q, t);
   const bgScore = bgSim >= 0.35 ? Math.round(bgSim * 50) : 0;
 
-  // 7. Consonant skeleton matching (dropping vowels for English typos like 'chrar' -> 'cherachera')
+  // 7. Consonant skeleton matching (dropping vowels for typo tolerance like 'chrar' -> 'cherachera')
   const qSkeleton = q.replace(/[aeiouy]/g, '');
   const tSkeleton = t.replace(/[aeiouy]/g, '');
   let skeletonScore = 0;
@@ -233,48 +247,299 @@ function computeIntelligentScore(query: string, target: string): number {
       }
       totalWordMatches += bestSingle;
     }
-    wordScore = Math.round((totalWordMatches / qWords.length) * 1.5);
+    wordScore = Math.round((totalWordMatches / Math.max(1, qWords.length)) * 1.5);
   }
 
   return Math.max(subseq, windowScore, bgScore, skeletonScore, thaiScore, wordScore);
 }
 
 /**
- * Intelligent Proximity & Typo-Tolerant Search on MediaItems
+ * Extract distinct words/tokens across all media items to build a live dynamic dictionary
  */
-export function fuzzySearchMedia(items: MediaItem[], query: string): MediaItem[] {
-  if (!query || !query.trim()) return items;
+export function buildVaultDictionary(items: MediaItem[]): Set<string> {
+  const dict = new Set<string>();
+
+  // Curated common tech / media words
+  const baseWords = [
+    'cyberpunk', 'synthwave', 'modular', 'synthesizer', 'youtube', 'pixiv',
+    'twitter', 'gemini', 'deepmind', 'vimeo', 'supabase', 'postgresql',
+    'tachikoma', 'blade', 'runner', 'vangelis', 'video', 'audio', 'image',
+    'illustration', 'artwork', 'social', 'architecture', 'interface',
+    'วิดีโอ', 'เพลง', 'ภาพ', 'รูปภาพ', 'อนิเมะ', 'ศิลปะ', 'บทความ', 'ไซเบอร์'
+  ];
+  baseWords.forEach((w) => dict.add(normalizeText(w)));
+
+  for (const item of items) {
+    // Add words from title
+    const titleTokens = item.title.split(/[\s\-_\/.,;:'"!?()\[\]{}]+/).filter((w) => w.length >= 2);
+    titleTokens.forEach((t) => dict.add(normalizeText(t)));
+
+    // Add tags
+    if (Array.isArray(item.tags)) {
+      item.tags.forEach((tg) => dict.add(normalizeText(tg)));
+    }
+
+    // Add siteName
+    if (item.siteName) {
+      item.siteName.split(/\s+/).forEach((w) => dict.add(normalizeText(w)));
+    }
+
+    // Add filename
+    if (item.fileName) {
+      item.fileName.replace(/\.[^/.]+$/, '').split(/[\s\-_]+/).forEach((w) => dict.add(normalizeText(w)));
+    }
+  }
+
+  return dict;
+}
+
+/**
+ * Find the closest vocabulary word if user has a typo (e.g. 'cuberpunk' -> 'cyberpunk')
+ */
+export function findTypoCorrection(token: string, dictionary: Set<string>): string | null {
+  const norm = normalizeText(token);
+  if (!norm || norm.length < 3 || /^\d+$/.test(norm)) return null;
+  if (dictionary.has(norm)) return null; // exact match already, no correction needed
+
+  let bestCandidate: string | null = null;
+  let minDistance = Infinity;
+  let maxSim = 0;
+
+  for (const word of dictionary) {
+    if (Math.abs(word.length - norm.length) > 2) continue;
+
+    const dist = damerauLevenshtein(norm, word);
+    const sim = 1 - dist / Math.max(norm.length, word.length);
+
+    // If edit distance is 1 or 2 with high similarity
+    if (dist <= 2 && sim >= 0.70) {
+      if (dist < minDistance || (dist === minDistance && sim > maxSim)) {
+        minDistance = dist;
+        maxSim = sim;
+        bestCandidate = word;
+      }
+    }
+  }
+
+  return bestCandidate;
+}
+
+/**
+ * Result structure of the Google-grade intelligent search
+ */
+export interface IntelligentSearchResult {
+  items: MediaItem[];
+  suggestedQuery?: string;
+  isAutoCorrected?: boolean;
+  matchReasons: Record<string, string>;
+  exactIdMatch?: MediaItem;
+  totalMatches: number;
+  extractedId?: number;
+}
+
+/**
+ * Intelligent Google-grade search engine:
+ * 1. Detects numeric ID (#45, 45, id:45, no. 45) -> Prioritizes post #45 at absolute top #1!
+ * 2. Thai <-> English keyboard slip translation (e.g. 'แถทเน' -> 'vault')
+ * 3. Dynamic vocabulary spelling correction & Google-style "Did you mean?" suggestions
+ * 4. Multi-token scoring across ID, title, tags, description, site, url, category, and mediaType
+ */
+export function intelligentSearch(items: MediaItem[], query: string): IntelligentSearchResult {
+  const matchReasons: Record<string, string> = {};
+
+  if (!query || !query.trim()) {
+    return {
+      items,
+      matchReasons,
+      totalMatches: items.length,
+    };
+  }
 
   const cleanQuery = query.trim();
+  const lowerQuery = cleanQuery.toLowerCase();
 
+  // 1. Check for ID search pattern: #45, 45, id:45, # 45, no. 45, โพสต์ 45, เลข 45
+  const idMatch = cleanQuery.match(/^(?:#|id\s*:?\s*|no\.?\s*|โพสต์\s*:?\s*|เลข\s*:?\s*)?(\d+)$/i);
+  let targetNumber: number | null = null;
+  if (idMatch && idMatch[1]) {
+    targetNumber = parseInt(idMatch[1], 10);
+  }
+
+  // 2. Dynamic dictionary for spell checking
+  const dictionary = buildVaultDictionary(items);
+
+  // Check keyboard layout conversion if no direct match or for suggestion
+  const { enToTh, thToEn } = convertKeyboardLayout(cleanQuery);
+  let convertedSuggestion: string | null = null;
+
+  // 3. Calculate query corrections
+  const tokens = cleanQuery.split(/\s+/).filter(Boolean);
+  let hasCorrection = false;
+  const correctedTokens = tokens.map((tk) => {
+    const correction = findTypoCorrection(tk, dictionary);
+    if (correction && correction !== tk.toLowerCase()) {
+      hasCorrection = true;
+      return correction;
+    }
+    return tk;
+  });
+
+  let suggestedQuery: string | undefined = undefined;
+  if (hasCorrection) {
+    suggestedQuery = correctedTokens.join(' ');
+  } else if (thToEn !== cleanQuery && thToEn.length >= 3) {
+    // If typing English on Thai keyboard (e.g. 'ัสนะีิำ' -> 'youtube')
+    for (const word of dictionary) {
+      if (thToEn.toLowerCase().includes(word) || word.includes(thToEn.toLowerCase())) {
+        convertedSuggestion = thToEn.toLowerCase();
+        break;
+      }
+    }
+    if (convertedSuggestion) suggestedQuery = convertedSuggestion;
+  }
+
+  // 4. Score all items
   const scored = items.map((item) => {
-    // Score across all key searchable fields
-    const titleScore = computeIntelligentScore(cleanQuery, item.title) * 2.8;
-    const descScore = computeIntelligentScore(cleanQuery, item.description || '') * 1.2;
-    const urlScore = computeIntelligentScore(cleanQuery, item.url) * 1.5;
-    const siteScore = computeIntelligentScore(cleanQuery, item.siteName || '') * 1.3;
+    let score = 0;
+    const reasons: string[] = [];
 
-    // Highest tag score with bonus
-    let tagScore = 0;
+    const itemNum = item.itemNumber || 0;
+
+    // --- RULE 1: EXACT ID NUMBER MATCH (Massive Top Priority) ---
+    if (targetNumber !== null && itemNum === targetNumber) {
+      score += 1000000; // Unbeatable score, appears #1
+      reasons.push(`ตรงกับรหัสโพสต์ #${targetNumber} โดยตรง (อันดับ 1)`);
+    } else if (targetNumber !== null && item.id.includes(String(targetNumber))) {
+      score += 500000;
+      reasons.push(`ตรงกับรหัสอ้างอิง ${targetNumber}`);
+    } else if (targetNumber !== null && item.url.includes(String(targetNumber))) {
+      score += 300000;
+      reasons.push(`URL มีรหัสตัวเลข #${targetNumber}`);
+    }
+
+    // --- RULE 2: TITLE MATCHING (High weight) ---
+    const titleScore = computeIntelligentScore(cleanQuery, item.title);
+    if (titleScore > 0) {
+      score += titleScore * 4.0;
+      if (titleScore >= 70) reasons.push('ตรงกับชื่อรายการ');
+    }
+
+    // --- RULE 3: TAG MATCHING ---
+    let bestTagScore = 0;
+    let matchedTagName = '';
     if (Array.isArray(item.tags)) {
       for (const tag of item.tags) {
         const s = computeIntelligentScore(cleanQuery, tag);
-        if (s > tagScore) tagScore = s * 1.8;
+        if (s > bestTagScore) {
+          bestTagScore = s;
+          matchedTagName = tag;
+        }
+      }
+    }
+    if (bestTagScore > 0) {
+      score += bestTagScore * 3.5;
+      if (bestTagScore >= 60) reasons.push(`ตรงกับแท็ก #${matchedTagName}`);
+    }
+
+    // --- RULE 4: DESCRIPTION MATCHING ---
+    if (item.description) {
+      const descScore = computeIntelligentScore(cleanQuery, item.description);
+      if (descScore > 0) {
+        score += descScore * 1.5;
       }
     }
 
-    // Media type score if user typed 'video', 'youtube', 'audio', etc.
-    const mediaTypeScore = computeIntelligentScore(cleanQuery, item.mediaType) * 0.8;
+    // --- RULE 5: URL & DOMAIN / SITENAME MATCHING ---
+    const siteScore = computeIntelligentScore(cleanQuery, item.siteName || '');
+    if (siteScore > 0) {
+      score += siteScore * 2.0;
+      if (siteScore >= 70) reasons.push(`ตรงกับแหล่งที่มา ${item.siteName}`);
+    }
 
-    const totalScore = titleScore + descScore + urlScore + siteScore + tagScore + mediaTypeScore;
+    const urlScore = computeIntelligentScore(cleanQuery, item.url);
+    if (urlScore > 0) {
+      score += urlScore * 1.6;
+    }
 
-    return { item, score: totalScore };
+    // --- RULE 6: MEDIA TYPE & CATEGORY MATCHING ---
+    const mediaTypeScore = computeIntelligentScore(cleanQuery, item.mediaType);
+    if (mediaTypeScore >= 70) {
+      score += mediaTypeScore * 1.2;
+      reasons.push(`ประเภทสื่อ ${item.mediaType}`);
+    }
+
+    // --- RULE 7: MULTI-TOKEN ALL-MATCH BONUS ---
+    if (tokens.length > 1) {
+      const allTokensMatch = tokens.every((tk) => {
+        const tScore = Math.max(
+          computeIntelligentScore(tk, item.title),
+          computeIntelligentScore(tk, item.description || ''),
+          computeIntelligentScore(tk, item.siteName || ''),
+          ...((item.tags || []).map((t) => computeIntelligentScore(tk, t)))
+        );
+        return tScore >= 35;
+      });
+
+      if (allTokensMatch) {
+        score *= 2.0; // 2x proximity boost when all search tokens are present
+        reasons.push('ตรงกับคำค้นหาครบทุกคำ');
+      }
+    }
+
+    // If query has a suggestion, also give partial credit for the suggestion
+    if (suggestedQuery && score < 15) {
+      const sScore = computeIntelligentScore(suggestedQuery, item.title);
+      if (sScore >= 60) {
+        score += sScore * 2.0;
+        reasons.push(`ใกล้เคียงกับ "${suggestedQuery}"`);
+      }
+    }
+
+    if (reasons.length > 0) {
+      matchReasons[item.id] = reasons.join(' • ');
+    }
+
+    return { item, score };
   });
 
-  // Keep items that match with sufficient confidence (score > 15)
-  // and sort descending by calculated relevance score
-  return scored
+  // Filter and sort
+  const matched = scored
     .filter((entry) => entry.score >= 15)
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.item);
+
+  // Check if an exact ID matched
+  const exactIdMatch = targetNumber !== null ? matched.find((i) => i.itemNumber === targetNumber) : undefined;
+
+  // Auto-correct fallback if original query found 0 results but suggestion has results!
+  if (matched.length === 0 && suggestedQuery && suggestedQuery !== cleanQuery) {
+    const fallbackResults = intelligentSearch(items, suggestedQuery);
+    if (fallbackResults.items.length > 0) {
+      return {
+        items: fallbackResults.items,
+        suggestedQuery,
+        isAutoCorrected: true,
+        matchReasons: fallbackResults.matchReasons,
+        totalMatches: fallbackResults.items.length,
+        extractedId: targetNumber || undefined,
+      };
+    }
+  }
+
+  return {
+    items: matched,
+    suggestedQuery: suggestedQuery !== cleanQuery ? suggestedQuery : undefined,
+    isAutoCorrected: false,
+    matchReasons,
+    exactIdMatch,
+    totalMatches: matched.length,
+    extractedId: targetNumber || undefined,
+  };
+}
+
+/**
+ * Drop-in replacement for existing fuzzySearchMedia: returns the items list
+ */
+export function fuzzySearchMedia(items: MediaItem[], query: string): MediaItem[] {
+  return intelligentSearch(items, query).items;
 }
