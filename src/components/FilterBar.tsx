@@ -16,7 +16,9 @@ import {
   X,
   Grid,
   LayoutGrid,
-  List
+  List,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { Category, MediaType, SearchFilters, Tag } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -30,6 +32,8 @@ interface FilterBarProps {
   totalItemCount: number;
   viewMode: 'grid' | 'large' | 'compact';
   onViewModeChange: (mode: 'grid' | 'large' | 'compact') => void;
+  allCardsExpanded?: boolean;
+  onToggleAllCardsImageFit?: () => void;
 }
 
 // Helper to map category icon string to Lucide component
@@ -53,6 +57,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   totalItemCount,
   viewMode,
   onViewModeChange,
+  allCardsExpanded = false,
+  onToggleAllCardsImageFit,
 }) => {
   const { t } = useTranslation();
 
@@ -213,6 +219,39 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               <List className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Global Card Image Expand / Fit Toggle Button */}
+          {onToggleAllCardsImageFit && (
+            <button
+              type="button"
+              onClick={onToggleAllCardsImageFit}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 touch-target ${
+                allCardsExpanded
+                  ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                  : 'bg-black/40 hover:bg-black/70 border-white/10 text-slate-300 hover:text-white'
+              }`}
+              title={
+                allCardsExpanded
+                  ? 'คลิกเพื่อย่อรูปทุกการ์ดกลับเป็นขนาดมาตรฐาน (Reset all card images to standard cover)'
+                  : 'คลิกเพื่อขยายรูปภาพในการ์ดทั้งหมดให้เห็นรูปเต็มทุกการ์ด (Expand all card images to fit full)'
+              }
+              aria-label="Toggle All Card Images Fit"
+            >
+              {allCardsExpanded ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden md:inline font-mono">รูปเต็มทุกการ์ด</span>
+                  <span className="md:hidden text-[11px]">ย่อรูป</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="hidden md:inline font-mono">ขยายรูปทุกการ์ด</span>
+                  <span className="md:hidden text-[11px]">ขยายรูป</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Clear Filters Button */}
           {hasActiveFilters && (

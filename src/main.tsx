@@ -1,20 +1,34 @@
 // Guard against read-only getter TypeError on window.fetch in sandboxed iframe environments
 if (typeof window !== 'undefined') {
   try {
-    const originalFetch = window.fetch;
-    const desc = Object.getOwnPropertyDescriptor(window, 'fetch') ||
-                 (typeof Window !== 'undefined' && Object.getOwnPropertyDescriptor(Window.prototype, 'fetch'));
-    if (desc && desc.get && !desc.set) {
+    let currentFetch = window.fetch;
+    const installFetchSetter = (target: any) => {
+      if (!target) return;
       try {
-        Object.defineProperty(window, 'fetch', {
-          get: () => originalFetch,
-          set: () => { /* no-op */ },
-          configurable: true,
-          enumerable: true,
-        });
+        const desc = Object.getOwnPropertyDescriptor(target, 'fetch');
+        if (!desc || (desc.get && !desc.set) || desc.configurable) {
+          Object.defineProperty(target, 'fetch', {
+            get: () => currentFetch,
+            set: (fn: typeof fetch) => {
+              currentFetch = fn;
+            },
+            configurable: true,
+            enumerable: true,
+          });
+        }
       } catch {
-        // Ignore if locked
+        // Ignore if restricted
       }
+    };
+
+    if (typeof Window !== 'undefined' && Window.prototype) {
+      installFetchSetter(Window.prototype);
+    }
+    installFetchSetter(window);
+    try {
+      installFetchSetter(Object.getPrototypeOf(window));
+    } catch {
+      // Ignore
     }
   } catch {
     // Ignore
@@ -27,7 +41,7 @@ if (typeof window !== 'undefined') {
       m === 'script error.' ||
       m === 'script error' ||
       m.includes('script error') ||
-      (m.includes('fetch') && m.includes('getter')) ||
+      (m.includes('fetch') && (m.includes('getter') || m.includes('cannot set property'))) ||
       m.includes('resizeobserver') ||
       (!file && line === 0)
     );

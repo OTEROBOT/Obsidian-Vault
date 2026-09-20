@@ -18,7 +18,192 @@ function openGraphScraperPlugin(): Plugin {
           return;
         }
 
-        // 2. OpenGraph metadata scraping endpoint
+        // 2. Twitter / X oEmbed Proxy endpoint
+        if (req.url.startsWith('/api/twitter-oembed')) {
+          try {
+            const reqUrl = new URL(req.url, 'http://localhost:3000');
+            const tweetUrl = reqUrl.searchParams.get('url');
+            if (!tweetUrl) {
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Missing url parameter' }));
+              return;
+            }
+
+            const oembedApi = `https://publish.x.com/oembed?url=${encodeURIComponent(tweetUrl)}&theme=dark&align=center&dnt=true&omit_script=false`;
+            const oembedRes = await fetch(oembedApi, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+              },
+            });
+
+            if (!oembedRes.ok) {
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = oembedRes.status;
+              res.end(JSON.stringify({ error: 'Failed to fetch tweet oEmbed from X' }));
+              return;
+            }
+
+            const oembedJson = await oembedRes.json();
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.statusCode = 200;
+            res.end(JSON.stringify(oembedJson));
+            return;
+          } catch (err: any) {
+            res.setHeader('Content-Type', 'application/json');
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err?.message || 'Server error fetching tweet oEmbed' }));
+            return;
+          }
+        }
+
+        // 3. Pixiv Artwork Info endpoint
+        if (req.url.startsWith('/api/pixiv-info')) {
+          try {
+            const reqUrl = new URL(req.url, 'http://localhost:3000');
+            let illustId = reqUrl.searchParams.get('id');
+            const inputUrl = reqUrl.searchParams.get('url');
+
+            if (!illustId && inputUrl) {
+              const m1 = inputUrl.match(/artworks\/(\d+)/i);
+              const m2 = inputUrl.match(/[?&]illust_id=(\d+)/i);
+              illustId = m1 ? m1[1] : (m2 ? m2[1] : null);
+            }
+
+            if (!illustId) {
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Missing Pixiv illust id or url' }));
+              return;
+            }
+
+            const ajaxUrl = `https://www.pixiv.net/ajax/illust/${illustId}`;
+            const pixivRes = await fetch(ajaxUrl, {
+              headers: {
+                'Referer': `https://www.pixiv.net/artworks/${illustId}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+              },
+            });
+
+            if (!pixivRes.ok) {
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = pixivRes.status;
+              res.end(JSON.stringify({ error: 'Failed to fetch Pixiv artwork info' }));
+              return;
+            }
+
+            const rawJson = await pixivRes.json();
+            const b = rawJson.body;
+            if (!b) {
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = 404;
+              res.end(JSON.stringify({ error: 'Pixiv artwork body not found' }));
+              return;
+            }
+
+            const pageCount = b.pageCount || 1;
+            const regularTemplate = b.urls?.regular || '';
+            const originalTemplate = b.urls?.original || '';
+
+            const pages: Array<{ index: number; regular: string; original: string; proxiedRegular: string; proxiedOriginal: string }> = [];
+            for (let i = 0; i < pageCount; i++) {
+              const regularUrl = regularTemplate.replace('_p0_', `_p${i}_`);
+              const originalUrl = originalTemplate.replace('_p0.', `_p${i}.`);
+              pages.push({
+                index: i,
+                regular: regularUrl,
+                original: originalUrl,
+                proxiedRegular: `/api/pixiv-image?url=${encodeURIComponent(regularUrl)}`,
+                proxiedOriginal: `/api/pixiv-image?url=${encodeURIComponent(originalUrl)}`,
+              });
+            }
+
+            const result = {
+              id: illustId,
+              title: b.title || `Pixiv #${illustId}`,
+              description: b.description || '',
+              userName: b.userName || 'Unknown Artist',
+              userId: b.userId || '',
+              userAvatar: b.profileImageUrl ? `/api/pixiv-image?url=${encodeURIComponent(b.profileImageUrl)}` : '',
+              tags: Array.isArray(b.tags?.tags) ? b.tags.tags.map((t: any) => t.tag) : [],
+              pageCount,
+              width: b.width,
+              height: b.height,
+              createDate: b.createDate,
+              pages,
+              thumbnailUrl: pages[0]?.proxiedRegular || `https://embed.pixiv.net/decorate.php?illust_id=${illustId}`,
+              decorateUrl: `https://embed.pixiv.net/decorate.php?illust_id=${illustId}`,
+              rawRegularUrl: b.urls?.regular,
+              rawOriginalUrl: b.urls?.original,
+            };
+
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'public, max-age=1800');
+            res.statusCode = 200;
+            res.end(JSON.stringify(result));
+            return;
+          } catch (err: any) {
+            res.setHeader('Content-Type', 'application/json');
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err?.message || 'Server error fetching Pixiv artwork' }));
+            return;
+          }
+        }
+
+        // 4. Pixiv Image Proxy endpoint (Bypasses hotlink protection & Referer checks)
+        if (req.url.startsWith('/api/pixiv-image')) {
+          try {
+            const reqUrl = new URL(req.url, 'http://localhost:3000');
+            const imageUrl = reqUrl.searchParams.get('url');
+
+            if (!imageUrl) {
+              res.statusCode = 400;
+              res.end('Missing url');
+              return;
+            }
+
+            const parsed = new URL(imageUrl);
+            const isAllowed = parsed.hostname.endsWith('pximg.net') || parsed.hostname.endsWith('pixiv.net');
+            if (!isAllowed) {
+              res.statusCode = 403;
+              res.end('Forbidden domain');
+              return;
+            }
+
+            const imgRes = await fetch(imageUrl, {
+              headers: {
+                'Referer': 'https://www.pixiv.net/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+              },
+            });
+
+            if (!imgRes.ok) {
+              res.statusCode = imgRes.status;
+              res.end('Failed to fetch image upstream');
+              return;
+            }
+
+            const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+            const arrayBuffer = await imgRes.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Length', buffer.length);
+            res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+            res.statusCode = 200;
+            res.end(buffer);
+            return;
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.end('Proxy error: ' + (err?.message || 'unknown'));
+            return;
+          }
+        }
+
+        // 5. OpenGraph metadata scraping endpoint
         if (req.url.startsWith('/api/scrape-og')) {
           let targetUrl: string | null = null;
           try {
@@ -95,6 +280,80 @@ function openGraphScraperPlugin(): Plugin {
                 mediaType: 'image',
               }));
               return;
+            }
+
+            // Pixiv Artwork Shortcut
+            if (parsedTarget.hostname.includes('pixiv.net')) {
+              const pixivMatch = targetUrl.match(/artworks\/(\d+)/i) || targetUrl.match(/[?&]illust_id=(\d+)/i);
+              if (pixivMatch && pixivMatch[1]) {
+                const illustId = pixivMatch[1];
+                try {
+                  const ajaxUrl = `https://www.pixiv.net/ajax/illust/${illustId}`;
+                  const pixivRes = await fetch(ajaxUrl, {
+                    headers: {
+                      'Referer': `https://www.pixiv.net/artworks/${illustId}`,
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                      'Accept': 'application/json',
+                    },
+                  });
+                  if (pixivRes.ok) {
+                    const data = await pixivRes.json();
+                    const b = data?.body;
+                    if (b) {
+                      const regularImg = b.urls?.regular ? `/api/pixiv-image?url=${encodeURIComponent(b.urls.regular)}` : `https://embed.pixiv.net/decorate.php?illust_id=${illustId}`;
+                      const pageCount = b.pageCount || 1;
+                      const candidateImages: string[] = [];
+                      for (let i = 0; i < Math.min(pageCount, 10); i++) {
+                        const pUrl = b.urls?.regular?.replace('_p0_', `_p${i}_`);
+                        if (pUrl) candidateImages.push(`/api/pixiv-image?url=${encodeURIComponent(pUrl)}`);
+                      }
+                      if (candidateImages.length === 0) candidateImages.push(regularImg);
+
+                      res.setHeader('Content-Type', 'application/json');
+                      res.statusCode = 200;
+                      res.end(JSON.stringify({
+                        title: `${b.title} - ${b.userName}`,
+                        description: `Pixiv illustration by ${b.userName} (${pageCount} page${pageCount > 1 ? 's' : ''})`,
+                        image: regularImg,
+                        candidateImages,
+                        siteName: `Pixiv (${b.userName})`,
+                        favicon: 'https://www.pixiv.net/favicon.ico',
+                        mediaType: 'image',
+                      }));
+                      return;
+                    }
+                  }
+                } catch {}
+              }
+            }
+
+            // Twitter / X Status Shortcut
+            if ((parsedTarget.hostname.includes('x.com') || parsedTarget.hostname.includes('twitter.com')) && targetUrl.includes('/status/')) {
+              try {
+                const oembedApi = `https://publish.x.com/oembed?url=${encodeURIComponent(targetUrl)}&theme=dark`;
+                const oembedRes = await fetch(oembedApi, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                    'Accept': 'application/json',
+                  },
+                });
+                if (oembedRes.ok) {
+                  const oData = await oembedRes.json();
+                  const snapshot = `https://s0.wp.com/mshots/v1/${encodeURIComponent(targetUrl)}?w=800&h=450`;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.statusCode = 200;
+                  res.end(JSON.stringify({
+                    title: `Post by @${oData.author_name || 'user'} on X`,
+                    description: oData.html ? oData.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200).trim() : 'Live interactive post on X',
+                    image: snapshot,
+                    candidateImages: [snapshot],
+                    siteName: 'X (Twitter)',
+                    favicon: 'https://abs.twimg.com/favicons/twitter.3.ico',
+                    mediaType: 'web',
+                  }));
+                  return;
+                }
+              } catch {}
             }
 
             // E-Hentai / Mature site cookies

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Plus, 
   Search, 
@@ -46,7 +46,15 @@ import {
   getDeletedCategoryIds,
   markCategoryAsDeleted,
   getDeletedTagIds,
-  markTagAsDeleted
+  markTagAsDeleted,
+  loadCardImageFits,
+  saveCardImageFits,
+  loadGlobalImageFit,
+  saveGlobalImageFit,
+  loadSavedFilters,
+  saveSavedFilters,
+  loadViewMode,
+  saveViewMode
 } from './utils/storage';
 import { 
   supabase, 
@@ -132,30 +140,65 @@ export default function App() {
     );
   }, [user]);
 
-  // Search & Filter State
-  const [filters, setFilters] = useState<SearchFilters>({
-    query: '',
-    categoryId: 'cat-all',
-    tag: 'all',
-    mediaType: 'all',
-    sortBy: 'newest',
-    pinnedOnly: false,
+  // Search & Filter State (Restored from persistent storage)
+  const [filters, setFilters] = useState<SearchFilters>(() => {
+    const saved = loadSavedFilters();
+    return {
+      query: '',
+      categoryId: saved.categoryId || 'cat-all',
+      tag: saved.tag || 'all',
+      mediaType: saved.mediaType || 'all',
+      sortBy: saved.sortBy || 'newest',
+      pinnedOnly: saved.pinnedOnly || false,
+    };
   });
 
+  // Automatically persist filter settings whenever user changes category, tag, sort, etc.
+  useEffect(() => {
+    saveSavedFilters(filters);
+  }, [filters]);
+
   const [viewMode, setViewMode] = useState<'grid' | 'large' | 'compact'>(() => {
-    try {
-      const saved = localStorage.getItem('obsidian_vault_view_mode') as any;
-      if (saved === 'grid' || saved === 'large' || saved === 'compact') return saved;
-    } catch {}
-    return (config.defaultViewMode as any) || 'grid';
+    const saved = loadViewMode();
+    return saved || (config.defaultViewMode as any) || 'grid';
   });
 
   const handleViewModeChange = (mode: 'grid' | 'large' | 'compact') => {
     setViewMode(mode);
-    try {
-      localStorage.setItem('obsidian_vault_view_mode', mode);
-    } catch {}
+    saveViewMode(mode);
   };
+
+  // Persistent Card Image Fit State (Individual card overrides + Global Expand toggle)
+  const [globalImageFit, setGlobalImageFit] = useState<'cover' | 'contain'>(() => loadGlobalImageFit());
+  const [cardImageFits, setCardImageFits] = useState<Record<string, 'cover' | 'contain'>>(() => loadCardImageFits());
+
+  const handleToggleCardImageFit = useCallback((itemId: string, newFit: 'cover' | 'contain') => {
+    setCardImageFits((prev) => {
+      const updated = { ...prev, [itemId]: newFit };
+      saveCardImageFits(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleToggleAllCardsImageFit = useCallback(() => {
+    const nextFit: 'cover' | 'contain' = globalImageFit === 'cover' ? 'contain' : 'cover';
+    setGlobalImageFit(nextFit);
+    saveGlobalImageFit(nextFit);
+
+    // Apply fit to all loaded items and persist
+    const updatedMap: Record<string, 'cover' | 'contain'> = {};
+    for (const it of items) {
+      updatedMap[it.id] = nextFit;
+    }
+    setCardImageFits(updatedMap);
+    saveCardImageFits(updatedMap);
+
+    showToast(
+      nextFit === 'contain'
+        ? 'ขยายรูปภาพในการ์ดทั้งหมดแล้ว (แสดงเต็มรูปไม่ตัดขอบทุกรายการ)'
+        : 'ปรับรูปภาพในการ์ดทั้งหมดเป็นขนาดมาตรฐานแล้ว (Fill Frame)'
+    );
+  }, [globalImageFit, items]);
 
   // Modal & Drawer visibility
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
@@ -944,6 +987,8 @@ export default function App() {
           totalItemCount={items.length}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
+          allCardsExpanded={globalImageFit === 'contain'}
+          onToggleAllCardsImageFit={handleToggleAllCardsImageFit}
         />
 
         {/* Search Query Feedback Badge */}
@@ -993,6 +1038,7 @@ export default function App() {
             }>
               {renderedItems.map((item) => {
                 const category = categories.find((c) => c.id === item.categoryId);
+                const itemImageFit = cardImageFits[item.id] ?? globalImageFit;
                 return (
                   <MediaCard
                     key={item.id}
@@ -1002,6 +1048,8 @@ export default function App() {
                     commentCount={commentCountsMap[item.id] || 0}
                     isLiked={userLikedItemIds.has(item.id)}
                     viewMode={viewMode}
+                    imageFit={itemImageFit}
+                    onToggleImageFit={handleToggleCardImageFit}
                     onPreview={handleOpenPreview}
                     onLike={handleLikeItem}
                     onRecordView={handleRecordView}

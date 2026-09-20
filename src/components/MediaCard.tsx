@@ -22,6 +22,7 @@ import { Category, MediaItem, UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { getDomainFromUrl, safeConfirm } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
+import { isPixiv, isTwitterOrX, getSafeImageUrl, getPixivIllustId } from '../utils/mediaProxy';
 
 interface MediaCardProps {
   item: MediaItem;
@@ -30,6 +31,8 @@ interface MediaCardProps {
   commentCount: number;
   isLiked?: boolean;
   viewMode?: 'grid' | 'large' | 'compact';
+  imageFit?: 'cover' | 'contain';
+  onToggleImageFit?: (itemId: string, newFit: 'cover' | 'contain') => void;
   onPreview: (item: MediaItem) => void;
   onLike: (itemId: string) => void;
   onRecordView?: (item: MediaItem) => void;
@@ -46,6 +49,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   commentCount,
   isLiked = false,
   viewMode = 'grid',
+  imageFit: imageFitProp,
+  onToggleImageFit,
   onPreview,
   onLike,
   onRecordView,
@@ -58,7 +63,16 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
-  const [imageFit, setImageFit] = useState<'cover' | 'contain'>(item.imageFit || 'cover');
+  const [localImageFit, setLocalImageFit] = useState<'cover' | 'contain'>(item.imageFit || 'cover');
+
+  const currentImageFit = imageFitProp ?? localImageFit;
+
+  const handleToggleFit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextFit = currentImageFit === 'cover' ? 'contain' : 'cover';
+    setLocalImageFit(nextFit);
+    onToggleImageFit?.(item.id, nextFit);
+  };
 
   const isRealAdmin = user.isLoggedIn && user.role === 'admin' && user.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
 
@@ -70,6 +84,22 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   };
 
   const getMediaTypeBadge = () => {
+    if (isPixiv(item.url)) {
+      return {
+        icon: <ImageIcon className="w-3 h-3 text-purple-300" />,
+        label: 'Pixiv',
+        bgColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+      };
+    }
+
+    if (isTwitterOrX(item.url)) {
+      return {
+        icon: <span className="font-bold text-[10px] leading-none">𝕏</span>,
+        label: 'X (Twitter)',
+        bgColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+      };
+    }
+
     switch (item.mediaType) {
       case 'video':
         return {
@@ -100,6 +130,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   };
 
   const badge = getMediaTypeBadge();
+  const safeThumbnailUrl = getSafeImageUrl(item.thumbnailUrl) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80';
+  const illustId = isPixiv(item.url) ? getPixivIllustId(item.url) : null;
 
   return (
     <div
@@ -125,35 +157,47 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             ? 'w-full sm:w-64 md:w-72 shrink-0 aspect-[16/10] sm:aspect-auto sm:min-h-[170px]'
             : viewMode === 'large'
             ? 'w-full aspect-[4/3] sm:aspect-[16/10] min-h-[280px] sm:min-h-[360px] md:min-h-[420px]'
+            : currentImageFit === 'contain'
+            ? 'w-full aspect-[4/3] sm:aspect-[16/10] min-h-[250px] sm:min-h-[290px]'
             : 'w-full aspect-[4/3] sm:aspect-[16/11] min-h-[210px] sm:min-h-[250px]'
         }`}
         onClick={() => onPreview(item)}
       >
         {/* Soft Ambient Glow when in 'contain' mode to eliminate blank black margins */}
-        {imageFit === 'contain' && (
+        {currentImageFit === 'contain' && (
           <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40 filter blur-xl scale-125">
             <img
-              src={item.thumbnailUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80'}
+              src={safeThumbnailUrl}
               alt=""
               className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
             />
             <div className="absolute inset-0 bg-slate-950/60" />
           </div>
         )}
 
         <img
-          src={item.thumbnailUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80'}
+          src={safeThumbnailUrl}
           alt={item.title}
           loading="lazy"
           decoding="async"
+          referrerPolicy="no-referrer"
           className={`w-full h-full transform-gpu will-change-transform transition-all duration-300 ease-out ${
-            imageFit === 'contain'
+            currentImageFit === 'contain'
               ? 'object-contain relative z-10 p-2 sm:p-3'
               : 'object-cover object-center group-hover:scale-105'
           }`}
           onError={(e) => {
             const target = e.target as HTMLImageElement;
             if (!target.dataset.failed) {
+              if (illustId) {
+                target.dataset.failed = 'pixiv-decorate';
+                target.src = `https://embed.pixiv.net/decorate.php?illust_id=${illustId}`;
+              } else {
+                target.dataset.failed = 'snapshot';
+                target.src = `https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=800&h=450`;
+              }
+            } else if (target.dataset.failed === 'pixiv-decorate') {
               target.dataset.failed = 'snapshot';
               target.src = `https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=800&h=450`;
             } else if (target.dataset.failed === 'snapshot') {
@@ -179,19 +223,16 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           {/* Image Fit Switcher Button: Toggle between full uncropped image vs fill cover */}
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setImageFit((prev) => (prev === 'cover' ? 'contain' : 'cover'));
-            }}
+            onClick={handleToggleFit}
             className={`h-7 px-2 rounded-lg border text-[10px] font-medium flex items-center gap-1 backdrop-blur-md shadow-md transition-all touch-target ${
-              imageFit === 'contain'
+              currentImageFit === 'contain'
                 ? 'bg-cyan-500/30 border-cyan-400/60 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                 : 'bg-black/60 hover:bg-black/85 border-white/20 text-slate-300 hover:text-white'
             }`}
-            title={imageFit === 'contain' ? 'คลิกเพื่อขยายเต็มกรอบ (Fill Frame)' : 'คลิกเพื่อดูภาพเต็มรูปไม่ตัดขอบ (Fit Full Image)'}
+            title={currentImageFit === 'contain' ? 'คลิกเพื่อย่อรูปกลับเป็นขนาดมาตรฐาน (Fill Frame)' : 'คลิกเพื่อขยายดูภาพเต็มรูปไม่ตัดขอบ (Fit Full Image)'}
             aria-label="Toggle Image Fit"
           >
-            {imageFit === 'contain' ? (
+            {currentImageFit === 'contain' ? (
               <>
                 <Minimize2 className="w-3 h-3 text-cyan-300" />
                 <span className="hidden sm:inline">เต็มรูป</span>

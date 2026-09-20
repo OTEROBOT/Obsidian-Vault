@@ -1,6 +1,86 @@
 <!doctype html>
 <html lang="en" class="dark">
   <head>
+    <script>
+      (function() {
+        // 1. Install immediate error suppression before any other tag or script runs
+        function isIgnorableError(msg) {
+          if (!msg) return false;
+          var m = String(msg).toLowerCase();
+          return (
+            m === 'script error.' ||
+            m === 'script error' ||
+            m.indexOf('script error') !== -1 ||
+            (m.indexOf('fetch') !== -1 && (m.indexOf('getter') !== -1 || m.indexOf('cannot set property') !== -1 || m.indexOf('typeerror') !== -1)) ||
+            m.indexOf('resizeobserver') !== -1
+          );
+        }
+
+        window.onerror = function(message, source, lineno, colno, error) {
+          var msg = String(message || (error && error.message) || '');
+          if (isIgnorableError(msg)) {
+            return true;
+          }
+          return false;
+        };
+
+        window.addEventListener('error', function(event) {
+          if (!event) return;
+          var msg = event.message || (event.error && event.error.message) || '';
+          if (isIgnorableError(msg)) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (!event) return;
+          var reason = event.reason;
+          var msg = (reason && (reason.message || reason)) ? String(reason.message || reason) : '';
+          if (isIgnorableError(msg) || msg.toLowerCase().indexOf('abort') !== -1) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+            return true;
+          }
+        }, true);
+
+        // 2. Proactively install getter/setter for window.fetch so assignments like window.fetch = ... succeed seamlessly
+        try {
+          var _currentFetch = window.fetch;
+          function installFetchSetter(target) {
+            if (!target) return;
+            try {
+              var desc = Object.getOwnPropertyDescriptor(target, 'fetch');
+              if (!desc || (desc.get && !desc.set) || desc.configurable) {
+                Object.defineProperty(target, 'fetch', {
+                  get: function() {
+                    return _currentFetch;
+                  },
+                  set: function(val) {
+                    _currentFetch = val;
+                  },
+                  configurable: true,
+                  enumerable: true
+                });
+              }
+            } catch (e) {}
+          }
+
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            installFetchSetter(Window.prototype);
+          }
+          installFetchSetter(window);
+          try {
+            installFetchSetter(Object.getPrototypeOf(window));
+          } catch (eProto) {}
+        } catch (eGlobal) {}
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="google-site-verification" content="jzsSWmSNmvrQJNg2caAvLhjpq5H3lNyAEQBZRWVr-TM" />
@@ -63,97 +143,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script>
-      (function() {
-        // 1. Prevent crashes when environment or third-party extensions attempt to set window.fetch
-        // in iframe sandboxes where window.fetch is configured with a getter only.
-        try {
-          var originalFetch = window.fetch;
-          var desc = Object.getOwnPropertyDescriptor(window, 'fetch') ||
-                     Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window) || {}, 'fetch') ||
-                     (typeof Window !== 'undefined' && Object.getOwnPropertyDescriptor(Window.prototype, 'fetch'));
-
-          if (desc && desc.get && !desc.set) {
-            try {
-              Object.defineProperty(window, 'fetch', {
-                get: function() {
-                  return originalFetch;
-                },
-                set: function(fn) {
-                  originalFetch = fn;
-                },
-                configurable: true,
-                enumerable: true
-              });
-            } catch (e1) {
-              if (typeof Window !== 'undefined' && Window.prototype) {
-                try {
-                  Object.defineProperty(Window.prototype, 'fetch', {
-                    get: function() {
-                      return originalFetch;
-                    },
-                    set: function(fn) {
-                      originalFetch = fn;
-                    },
-                    configurable: true,
-                    enumerable: true
-                  });
-                } catch (e2) {}
-              }
-            }
-          }
-        } catch (e) {}
-
-        // Helper to check if an error is cross-origin or benign sandbox noise
-        function isIgnorableError(msg, file, line) {
-          if (!msg) return (!file && line === 0);
-          var m = String(msg).toLowerCase();
-          return (
-            m === 'script error.' ||
-            m === 'script error' ||
-            m.indexOf('script error') !== -1 ||
-            (m.indexOf('fetch') !== -1 && m.indexOf('getter') !== -1) ||
-            m.indexOf('resizeobserver') !== -1 ||
-            (!file && line === 0)
-          );
-        }
-
-        // 2. Global window.onerror to suppress unhandled cross-origin / iframe script errors
-        window.onerror = function(message, source, lineno, colno, error) {
-          if (isIgnorableError(message, source, lineno)) {
-            return true; // suppresses the error from bubbling to browser harness
-          }
-          return false;
-        };
-
-        // 3. Capture-phase error listener
-        window.addEventListener('error', function(event) {
-          if (!event) return;
-          var msg = event.message || (event.error && event.error.message) || '';
-          if (isIgnorableError(msg, event.filename, event.lineno)) {
-            event.preventDefault();
-            if (typeof event.stopImmediatePropagation === 'function') {
-              event.stopImmediatePropagation();
-            }
-            return true;
-          }
-        }, true);
-
-        // 4. Catch and suppress unhandled promise rejections from third-party / cross-origin sources
-        window.addEventListener('unhandledrejection', function(event) {
-          if (!event) return;
-          var reason = event.reason;
-          var msg = (reason && (reason.message || reason)) ? String(reason.message || reason) : '';
-          if (isIgnorableError(msg, '', 0) || msg.toLowerCase().indexOf('abort') !== -1) {
-            event.preventDefault();
-            if (typeof event.stopImmediatePropagation === 'function') {
-              event.stopImmediatePropagation();
-            }
-            return true;
-          }
-        }, true);
-      })();
-    </script>
     <script>
       (function() {
         try {

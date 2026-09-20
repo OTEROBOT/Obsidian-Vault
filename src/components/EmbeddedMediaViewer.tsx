@@ -24,6 +24,9 @@ import { Comment, MediaItem, UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { getDomainFromUrl } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
+import { isTwitterOrX, isPixiv, getSafeImageUrl } from '../utils/mediaProxy';
+import { TwitterEmbed } from './TwitterEmbed';
+import { PixivViewer } from './PixivViewer';
 
 // Domains that strictly prohibit iframe embedding via X-Frame-Options: DENY or CSP frame-ancestors
 const BLOCKED_IFRAME_DOMAINS = [
@@ -44,28 +47,6 @@ const BLOCKED_IFRAME_DOMAINS = [
   'dlsite.com',
   'bilibili.com'
 ];
-
-const isTwitterOrX = (url: string): boolean => {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com') || host === 't.co';
-  } catch {
-    return false;
-  }
-};
-
-const getTwitterHandle = (url: string): string | null => {
-  try {
-    const parsed = new URL(url);
-    const parts = parsed.pathname.split('/').filter(Boolean);
-    if (parts.length > 0 && !['home', 'explore', 'notifications', 'messages', 'i', 'hashtag', 'search'].includes(parts[0])) {
-      return `@${parts[0]}`;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
 
 const isKnownIframeBlocked = (url: string): boolean => {
   try {
@@ -294,9 +275,34 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
       );
     }
 
-    // 4. Image Lightbox with GPU Scale Transform
+    // 4. Dedicated Interactive Pixiv Viewer (High-res, Multi-page album, Anti-403 Proxy)
+    if (isPixiv(item.url)) {
+      return (
+        <PixivViewer
+          url={item.url}
+          title={item.title}
+          thumbnailUrl={item.thumbnailUrl}
+          description={item.description}
+        />
+      );
+    }
+
+    // 5. Dedicated Interactive X (Twitter) oEmbed Viewer
+    if (isTwitterOrX(item.url)) {
+      return (
+        <TwitterEmbed
+          url={item.url}
+          title={item.title}
+          description={item.description}
+          thumbnailUrl={item.thumbnailUrl}
+        />
+      );
+    }
+
+    // 6. Image Lightbox with GPU Scale Transform
     if (item.embedType === 'image' || item.mediaType === 'image') {
-      const imgSrc = item.mediaUrl || item.thumbnailUrl || item.url;
+      const rawSrc = item.mediaUrl || item.thumbnailUrl || item.url;
+      const imgSrc = getSafeImageUrl(rawSrc);
       return (
         <div className="relative w-full rounded-2xl overflow-hidden bg-black/80 border border-white/10 flex flex-col items-center justify-center min-h-[360px] max-h-[70vh]">
           {/* Zoom Controls */}
@@ -333,6 +339,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
               alt={item.title}
               loading="lazy"
               decoding="async"
+              referrerPolicy="no-referrer"
               style={{ 
                 transform: `translate3d(0, 0, 0) scale(${imageZoom})`, 
                 transition: 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -340,115 +347,6 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
               }}
               className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-2xl"
             />
-          </div>
-        </div>
-      );
-    }
-
-    // 5. Special Dedicated Sleek Card for X (Twitter)
-    if (isTwitterOrX(item.url)) {
-      const handle = getTwitterHandle(item.url);
-      const isPost = item.url.includes('/status/');
-
-      return (
-        <div className="w-full space-y-4">
-          <div className="rounded-2xl bg-[#000000] border border-white/20 p-5 sm:p-7 shadow-2xl space-y-5 relative overflow-hidden">
-            {/* Ambient accent background */}
-            <div className="absolute top-0 right-0 w-72 h-72 bg-sky-500/[0.04] rounded-full blur-3xl pointer-events-none" />
-
-            {/* Top Brand Bar */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-white font-bold text-xl shadow-inner select-none">
-                  𝕏
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm sm:text-base font-bold text-white tracking-tight">
-                      {isPost ? 'X Post / Tweet' : 'X Profile'}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-white/10 text-slate-300 border border-white/15">
-                      x.com
-                    </span>
-                  </div>
-                  {handle && (
-                    <p className="text-xs text-sky-400 font-mono mt-0.5">
-                      {handle}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white text-black hover:bg-slate-200 transition-all shadow-md touch-target active:scale-95"
-              >
-                <span>เปิดบน 𝕏</span>
-                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
-              </a>
-            </div>
-
-            {/* Media Content & Description */}
-            <div className="flex flex-col md:flex-row gap-5 items-start">
-              {item.thumbnailUrl && (
-                <div className="relative w-full md:w-64 aspect-video rounded-xl overflow-hidden bg-zinc-900 border border-white/10 shrink-0 shadow-lg">
-                  <img
-                    src={item.thumbnailUrl}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-              <div className="flex-1 space-y-2.5 min-w-0">
-                <h3 className="text-lg sm:text-xl font-bold text-white leading-snug">
-                  {item.title}
-                </h3>
-                {item.description && (
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-line">
-                    {item.description}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Explanatory Security Notice */}
-            <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3.5 flex items-start gap-3 text-xs text-slate-300">
-              <div className="w-5 h-5 rounded-md bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
-                <Info className="w-3.5 h-3.5" />
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-slate-200">
-                  ทำไม X (Twitter) ถึงเปิดหน้าเว็บในกรอบ Iframe ด้านในไม่ได้?
-                </p>
-                <p className="text-slate-400 text-[11px] leading-relaxed">
-                  เนื่องจาก X (Twitter) มีการตั้งค่าความปลอดภัยระดับสากล (<code className="text-cyan-300 font-mono">X-Frame-Options: DENY</code>) เพื่อป้องกันการโจมตีแบบดักข้อมูล (Clickjacking) เบราว์เซอร์จึงไม่อนุญาตให้ฝังหน้าเว็บลงในกรอบ Iframe โดยตรง หากเปิดกรอบ Iframe จะกลายเป็นหน้าจอขาวว่างเปล่า คุณสามารถแตะปุ่ม <strong>"เปิดดูบนแอป 𝕏"</strong> เพื่อเปิดหน้าโปรไฟล์/ทวีตนี้ได้เต็มรูปแบบทันที
-                </p>
-              </div>
-            </div>
-
-            {/* Action Row */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-white text-black hover:bg-slate-200 transition-all touch-target shadow-lg shadow-white/5 active:scale-95"
-              >
-                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>เปิดดูบนแอป 𝕏 หรือหน้าต่างใหม่</span>
-              </a>
-              <button
-                onClick={handleCopyLink}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/10 hover:bg-white/15 border border-white/10 transition-all touch-target"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? t.card.copied : 'คัดลอกลิงก์ 𝕏'}</span>
-              </button>
-            </div>
           </div>
         </div>
       );

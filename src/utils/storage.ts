@@ -1,4 +1,4 @@
-import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
+import { Category, Comment, MediaItem, SearchFilters, SystemConfig, Tag, UserProfile } from '../types';
 import { DEFAULT_CONFIG, INITIAL_CATEGORIES, INITIAL_COMMENTS, INITIAL_ITEMS, INITIAL_TAGS, INITIAL_USER } from '../data/initialData';
 import { ADMIN_EMAIL } from './supabase';
 
@@ -15,6 +15,10 @@ const KEYS = {
   DELETED_TAG_IDS: 'obsidian_vault_deleted_tag_ids_v1',
   CUSTOM_CATEGORIES: 'obsidian_vault_custom_cats_v1',
   CUSTOM_TAGS: 'obsidian_vault_custom_tags_v1',
+  CARD_IMAGE_FITS: 'obsidian_vault_card_image_fits_v1',
+  GLOBAL_IMAGE_FIT: 'obsidian_vault_global_image_fit_v1',
+  SAVED_FILTERS: 'obsidian_vault_filters_v1',
+  VIEW_MODE: 'obsidian_vault_view_mode',
 };
 
 // Safe storage wrapper that handles sandboxed iframe environments
@@ -423,4 +427,99 @@ export function safeConfirm(message: string): boolean {
   }
   return true;
 }
+
+/**
+ * Load individual card image fit overrides from persistent storage
+ */
+export function loadCardImageFits(): Record<string, 'cover' | 'contain'> {
+  try {
+    const raw = storage.getItem(KEYS.CARD_IMAGE_FITS);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save individual card image fit overrides to persistent storage
+ */
+export function saveCardImageFits(fits: Record<string, 'cover' | 'contain'>): void {
+  try {
+    storage.setItem(KEYS.CARD_IMAGE_FITS, JSON.stringify(fits));
+  } catch (e) {
+    console.warn('Failed to save card image fits:', e);
+  }
+}
+
+/**
+ * Load global card image expand / fit mode from persistent storage
+ */
+export function loadGlobalImageFit(): 'cover' | 'contain' {
+  try {
+    const raw = storage.getItem(KEYS.GLOBAL_IMAGE_FIT);
+    if (raw === 'cover' || raw === 'contain') return raw;
+  } catch {}
+  return 'cover';
+}
+
+/**
+ * Save global card image expand / fit mode to persistent storage
+ */
+export function saveGlobalImageFit(fit: 'cover' | 'contain'): void {
+  try {
+    storage.setItem(KEYS.GLOBAL_IMAGE_FIT, fit);
+  } catch (e) {
+    console.warn('Failed to save global image fit:', e);
+  }
+}
+
+/**
+ * Load user filter settings from persistent storage (excluding transient query)
+ */
+export function loadSavedFilters(): Partial<SearchFilters> {
+  try {
+    const raw = storage.getItem(KEYS.SAVED_FILTERS);
+    if (!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save user filter settings to persistent storage
+ */
+export function saveSavedFilters(filters: SearchFilters): void {
+  try {
+    const { query, ...persisted } = filters;
+    storage.setItem(KEYS.SAVED_FILTERS, JSON.stringify(persisted));
+  } catch (e) {
+    console.warn('Failed to save filters:', e);
+  }
+}
+
+/**
+ * Load view mode from persistent storage
+ */
+export function loadViewMode(): 'grid' | 'large' | 'compact' {
+  try {
+    const raw = storage.getItem(KEYS.VIEW_MODE);
+    if (raw === 'grid' || raw === 'large' || raw === 'compact') return raw;
+  } catch {}
+  return 'grid';
+}
+
+/**
+ * Save view mode to persistent storage
+ */
+export function saveViewMode(mode: 'grid' | 'large' | 'compact'): void {
+  try {
+    storage.setItem(KEYS.VIEW_MODE, mode);
+  } catch (e) {
+    console.warn('Failed to save view mode:', e);
+  }
+}
+
 
