@@ -18,7 +18,8 @@ import {
   ZoomOut,
   Maximize2,
   Info,
-  Lock
+  Lock,
+  Bookmark
 } from 'lucide-react';
 import { Comment, MediaItem, UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -63,8 +64,10 @@ interface EmbeddedMediaViewerProps {
   user: UserProfile;
   comments: Comment[];
   isLiked?: boolean;
+  isBookmarked?: boolean;
   onClose: () => void;
   onLike: (itemId: string) => void;
+  onToggleBookmark?: (itemId: string) => void;
   onAddComment: (itemId: string, content: string, guestNickname?: string) => void;
   onDeleteComment?: (commentId: string) => void;
   onOpenAuth: () => void;
@@ -75,8 +78,10 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   user,
   comments,
   isLiked = false,
+  isBookmarked = false,
   onClose,
   onLike,
+  onToggleBookmark,
   onAddComment,
   onDeleteComment,
   onOpenAuth,
@@ -598,6 +603,24 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
                   {isLiked ? 'ถูกใจแล้ว (คลิกเพื่อยกเลิก)' : t.card.likes} ({item.likesCount || 0})
                 </span>
               </button>
+
+              {/* Smart Toggle Bookmark Button */}
+              {onToggleBookmark && (
+                <button
+                  onClick={() => onToggleBookmark(item.id)}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all touch-target active:scale-98 ${
+                    isBookmarked
+                      ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-[0_0_25px_rgba(245,158,11,0.3)]'
+                      : 'bg-white/5 text-slate-300 hover:bg-amber-500/15 hover:text-amber-300 border border-white/10 hover:border-amber-500/30'
+                  }`}
+                  title={isBookmarked ? 'ลบออกจากบุ๊กมาร์ก' : 'บันทึกลงบุ๊กมาร์ก'}
+                >
+                  <Bookmark className={`w-4 h-4 transition-transform duration-200 ${isBookmarked ? 'fill-amber-400 text-amber-400 scale-110' : 'text-slate-400'}`} />
+                  <span>
+                    {isBookmarked ? 'บันทึกลงบุ๊กมาร์กแล้ว' : 'บันทึกลงบุ๊กมาร์ก (Save)'}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Comment Section (Right 2 Cols) */}

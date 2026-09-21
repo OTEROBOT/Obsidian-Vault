@@ -18,7 +18,8 @@ import {
   Eye, 
   HardDrive,
   Hash,
-  Sparkles
+  Sparkles,
+  Bookmark
 } from 'lucide-react';
 import { Category, MediaItem, UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -33,12 +34,14 @@ interface MediaCardProps {
   user: UserProfile;
   commentCount: number;
   isLiked?: boolean;
+  isBookmarked?: boolean;
   viewMode?: 'grid' | 'large' | 'compact';
   imageFit?: 'cover' | 'contain';
   matchReason?: string;
   onToggleImageFit?: (itemId: string, newFit: 'cover' | 'contain') => void;
   onPreview: (item: MediaItem) => void;
   onLike: (itemId: string) => void;
+  onToggleBookmark?: (itemId: string) => void;
   onRecordView?: (item: MediaItem) => void;
   onEdit?: (item: MediaItem) => void;
   onDelete?: (itemId: string) => void;
@@ -52,12 +55,14 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   user,
   commentCount,
   isLiked = false,
+  isBookmarked = false,
   viewMode = 'grid',
   imageFit: imageFitProp,
   matchReason,
   onToggleImageFit,
   onPreview,
   onLike,
+  onToggleBookmark,
   onRecordView,
   onEdit,
   onDelete,
@@ -491,6 +496,31 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
               <span className="font-mono text-[11px]">{commentCount}</span>
             </button>
+
+            {onToggleBookmark && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleBookmark(item.id);
+                }}
+                className={`h-7.5 inline-flex items-center gap-1 px-1.5 rounded-lg transition-all group/bm touch-target select-none ${
+                  isBookmarked
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-semibold'
+                    : 'hover:text-amber-400 hover:bg-white/5 border border-transparent text-slate-400'
+                }`}
+                title={isBookmarked ? 'ลบออกจากบุ๊กมาร์ก (Bookmarked)' : 'บันทึกลงบุ๊กมาร์ก (Save Bookmark)'}
+                aria-label={isBookmarked ? 'Remove Bookmark' : 'Bookmark'}
+              >
+                <Bookmark
+                  className={`w-3.5 h-3.5 transition-transform duration-200 group-hover/bm:scale-125 ${
+                    isBookmarked
+                      ? 'text-amber-400 fill-amber-400'
+                      : 'text-slate-500 group-hover/bm:text-amber-400'
+                  }`}
+                />
+              </button>
+            )}
           </div>
 
           {/* Action Buttons: Copy Link, Preview, External Link */}

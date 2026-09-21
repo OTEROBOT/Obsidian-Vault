@@ -346,6 +346,56 @@ export function saveUserLikes(user: UserProfile, likedIds: string[]): void {
   }
 }
 
+export function getUserBookmarksKey(user?: UserProfile): string {
+  if (user && user.isLoggedIn && user.email) {
+    return `obsidian_vault_bookmarks_${user.email.toLowerCase().trim()}`;
+  }
+  let guestId = storage.getItem('obsidian_vault_guest_uid');
+  if (!guestId) {
+    guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    storage.setItem('obsidian_vault_guest_uid', guestId);
+  }
+  return `obsidian_vault_bookmarks_${guestId}`;
+}
+
+export function loadUserBookmarks(user?: UserProfile): string[] {
+  try {
+    const key = getUserBookmarksKey(user);
+    const raw = storage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveUserBookmarks(user: UserProfile, bookmarkedIds: string[]): void {
+  try {
+    const key = getUserBookmarksKey(user);
+    storage.setItem(key, JSON.stringify(bookmarkedIds));
+  } catch (e) {
+    console.error('Failed to save user bookmarks:', e);
+  }
+}
+
+export function loadTopTenCollapsed(): boolean {
+  try {
+    const raw = storage.getItem('obsidian_vault_top10_collapsed');
+    return raw === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function saveTopTenCollapsed(collapsed: boolean): void {
+  try {
+    storage.setItem('obsidian_vault_top10_collapsed', String(collapsed));
+  } catch (e) {
+    console.warn('Failed to save top10 collapsed state:', e);
+  }
+}
+
 export function loadRecentlyViewed(): RecentlyViewedRecord[] {
   try {
     const raw = storage.getItem(KEYS.RECENTLY_VIEWED);

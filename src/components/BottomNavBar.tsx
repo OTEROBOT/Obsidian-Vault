@@ -6,7 +6,8 @@ import {
   Plus, 
   Shield, 
   Menu,
-  Globe
+  Globe,
+  User
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -18,6 +19,7 @@ interface BottomNavBarProps {
   onOpenRecent: () => void;
   onOpenAddLink: () => void;
   onOpenAdmin: () => void;
+  onOpenProfile?: () => void;
   onScrollToTop: () => void;
   onFocusSearch: () => void;
   recentCount: number;
@@ -29,6 +31,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onOpenRecent,
   onOpenAddLink,
   onOpenAdmin,
+  onOpenProfile,
   onScrollToTop,
   onFocusSearch,
   recentCount,
@@ -97,6 +100,15 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           >
             <Shield className="w-5 h-5" />
             <span className="text-[10px] mt-0.5 font-medium">{t.bottomNav.admin}</span>
+          </button>
+        ) : user.isLoggedIn ? (
+          <button
+            onClick={onOpenProfile || onOpenMobileMenu}
+            className="flex flex-col items-center justify-center h-full text-cyan-400 hover:text-cyan-300 transition-colors touch-target"
+            aria-label="โปรไฟล์"
+          >
+            <User className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 font-medium">โปรไฟล์</span>
           </button>
         ) : (
           <button

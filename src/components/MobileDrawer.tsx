@@ -25,6 +25,7 @@ interface MobileDrawerProps {
   user: UserProfile;
   onOpenAuth: () => void;
   onLogout: () => void;
+  onOpenProfile?: () => void;
   onOpenAddLink: () => void;
   onOpenAdmin: () => void;
   onOpenRecent: () => void;
@@ -37,6 +38,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   user,
   onOpenAuth,
   onLogout,
+  onOpenProfile,
   onOpenAddLink,
   onOpenAdmin,
   onOpenRecent,
@@ -87,35 +89,50 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
         {/* User Card */}
         <div className="p-4 border-b border-white/10 bg-white/[0.02]">
           {user.isLoggedIn ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-10 h-10 rounded-xl object-cover ring-2 ring-cyan-500/40"
-                />
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-100">{user.name}</h3>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                      user.role === 'admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                    }`}>
-                      {user.role}
-                    </span>
-                    <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{user.email}</span>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-10 h-10 rounded-xl object-cover ring-2 ring-cyan-500/40"
+                  />
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-100">{user.name}</h3>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
+                        user.role === 'admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                      }`}>
+                        {user.role}
+                      </span>
+                      <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{user.email}</span>
+                    </div>
                   </div>
                 </div>
+                <button
+                  onClick={() => {
+                    onLogout();
+                    onClose();
+                  }}
+                  className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors touch-target"
+                  title={t.nav.signOut}
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  onLogout();
-                  onClose();
-                }}
-                className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors touch-target"
-                title={t.nav.signOut}
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+
+              {onOpenProfile && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    onOpenProfile();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-xs font-semibold tracking-wide transition-all shadow-sm"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>โปรไฟล์ของฉัน (ถูกใจ, บุ๊กมาร์ก, คอมเมนต์)</span>
+                </button>
+              )}
             </div>
           ) : (
             <button

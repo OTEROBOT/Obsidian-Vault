@@ -34,6 +34,10 @@ import {
   pruneStaleRecentlyViewed,
   loadUserLikes,
   saveUserLikes,
+  loadUserBookmarks,
+  saveUserBookmarks,
+  loadTopTenCollapsed,
+  saveTopTenCollapsed,
   resetAllData, 
   saveCategories, 
   saveComments, 
@@ -90,6 +94,8 @@ import { AuthModal } from './components/AuthModal';
 import { MobileDrawer } from './components/MobileDrawer';
 import { BottomNavBar } from './components/BottomNavBar';
 import { HeroBanner } from './components/HeroBanner';
+import { TopTenSlider } from './components/TopTenSlider';
+import { UserProfileModal } from './components/UserProfileModal';
 import { ScrollNavigation } from './components/ScrollNavigation';
 import { useTranslation } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
@@ -110,9 +116,16 @@ export default function App() {
   // 1 Account = 1 Like per item tracking state
   const [userLikedItemIds, setUserLikedItemIds] = useState<Set<string>>(() => new Set(loadUserLikes(user)));
 
-  // Synchronize liked items whenever user identity or login status changes
+  // User Bookmarked item IDs
+  const [userBookmarkedItemIds, setUserBookmarkedItemIds] = useState<Set<string>>(() => new Set(loadUserBookmarks(user)));
+
+  // Top 10 Popular Posts collapsed/minimized preference state
+  const [isTopTenCollapsed, setIsTopTenCollapsed] = useState(() => loadTopTenCollapsed());
+
+  // Synchronize liked & bookmarked items whenever user identity or login status changes
   useEffect(() => {
     setUserLikedItemIds(new Set(loadUserLikes(user)));
+    setUserBookmarkedItemIds(new Set(loadUserBookmarks(user)));
   }, [user.id, user.email, user.isLoggedIn]);
 
   // Strictly valid recently viewed records where the target item exists in repository
@@ -208,6 +221,7 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isRecentOpen, setIsRecentOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Floating Toast Notification
@@ -641,6 +655,33 @@ export default function App() {
     }
   };
 
+  // Toggle Bookmark Handler (Add/Remove from user's personal bookmarks)
+  const handleToggleBookmark = (itemId: string) => {
+    setUserBookmarkedItemIds((prev) => {
+      const isBookmarked = prev.has(itemId);
+      const nextSet = new Set<string>(prev);
+      if (isBookmarked) {
+        nextSet.delete(itemId);
+        showToast('🔖 ยกเลิกการบุ๊กมาร์กแล้ว');
+      } else {
+        nextSet.add(itemId);
+        showToast('🔖 บันทึกลงบุ๊กมาร์กเรียบร้อยแล้ว');
+      }
+      saveUserBookmarks(user, Array.from(nextSet));
+      return nextSet;
+    });
+  };
+
+  // Toggle Top 10 Popular Posts Slider (minimize/collapse to prevent clutter)
+  const handleToggleTopTenCollapse = () => {
+    setIsTopTenCollapsed((prev) => {
+      const next = !prev;
+      saveTopTenCollapsed(next);
+      showToast(next ? 'ซ่อนแถบ 10 อันดับโพสต์ยอดนิยมแล้ว' : 'แสดงแถบ 10 อันดับโพสต์ยอดนิยม');
+      return next;
+    });
+  };
+
   const handleRemoveRecentItem = (itemId: string) => {
     const updated = removeRecentlyViewedItem(itemId);
     setRecentRecords(updated);
@@ -956,6 +997,7 @@ export default function App() {
         user={user}
         onOpenAuth={() => setIsAuthOpen(true)}
         onLogout={handleLogout}
+        onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAddLink={() => {
           if (isRealAdmin) {
             setEditingItem(null);
@@ -996,6 +1038,20 @@ export default function App() {
             onUpdateSlidePosition={handleUpdateSlidePosition}
           />
         )}
+
+        {/* 10 อันดับโพสต์ยอดนิยม (Top 10 Most Liked Posts with Toggle/Collapse) */}
+        <TopTenSlider
+          items={items}
+          categories={categories}
+          user={user}
+          userLikedItemIds={userLikedItemIds}
+          userBookmarkedItemIds={userBookmarkedItemIds}
+          isCollapsed={isTopTenCollapsed}
+          onToggleCollapse={handleToggleTopTenCollapse}
+          onPreview={handleOpenPreview}
+          onLike={handleLikeItem}
+          onToggleBookmark={handleToggleBookmark}
+        />
 
         {/* Multi-Filters & Taxonomy Bar */}
         <FilterBar
@@ -1125,12 +1181,14 @@ export default function App() {
                     user={user}
                     commentCount={commentCountsMap[item.id] || 0}
                     isLiked={userLikedItemIds.has(item.id)}
+                    isBookmarked={userBookmarkedItemIds.has(item.id)}
                     viewMode={viewMode}
                     imageFit={itemImageFit}
                     matchReason={searchResult.matchReasons[item.id]}
                     onToggleImageFit={handleToggleCardImageFit}
                     onPreview={handleOpenPreview}
                     onLike={handleLikeItem}
+                    onToggleBookmark={handleToggleBookmark}
                     onRecordView={handleRecordView}
                     onEdit={(it) => {
                       setEditingItem(it);
@@ -1184,6 +1242,7 @@ export default function App() {
         user={user}
         onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         onOpenRecent={() => setIsRecentOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAddLink={() => {
           if (isRealAdmin) {
             setEditingItem(null);
@@ -1210,6 +1269,7 @@ export default function App() {
         onClose={() => setIsMobileMenuOpen(false)}
         user={user}
         onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
         onLogout={handleLogout}
         onOpenAddLink={() => {
           if (isRealAdmin) {
@@ -1237,8 +1297,10 @@ export default function App() {
           user={user}
           comments={comments.filter((c) => c.itemId === previewItem.id)}
           isLiked={userLikedItemIds.has(previewItem.id)}
+          isBookmarked={userBookmarkedItemIds.has(previewItem.id)}
           onClose={() => setPreviewItem(null)}
           onLike={handleLikeItem}
+          onToggleBookmark={handleToggleBookmark}
           onAddComment={handleAddComment}
           onDeleteComment={isRealAdmin ? handleDeleteComment : undefined}
           onOpenAuth={() => setIsAuthOpen(true)}
@@ -1315,6 +1377,27 @@ export default function App() {
           currentUser={user}
           onLogin={handleLogin}
           onLogout={handleLogout}
+        />
+      )}
+
+      {/* User Profile & Activity Modal (Liked, Bookmarked, Comments) */}
+      {isProfileOpen && (
+        <UserProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          user={user}
+          items={items}
+          comments={comments}
+          userLikedItemIds={userLikedItemIds}
+          userBookmarkedItemIds={userBookmarkedItemIds}
+          onPreviewItem={handleOpenPreview}
+          onUnlike={handleLikeItem}
+          onUnbookmark={handleToggleBookmark}
+          onDeleteComment={handleDeleteComment}
+          onOpenAuth={() => {
+            setIsProfileOpen(false);
+            setIsAuthOpen(true);
+          }}
         />
       )}
 

@@ -24,6 +24,7 @@ interface NavbarProps {
   user: UserProfile;
   onOpenAuth: () => void;
   onLogout: () => void;
+  onOpenProfile?: () => void;
   onOpenAddLink: () => void;
   onOpenAdmin: () => void;
   onOpenRecent: () => void;
@@ -39,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   user,
   onOpenAuth,
   onLogout,
+  onOpenProfile,
   onOpenAddLink,
   onOpenAdmin,
   onOpenRecent,
@@ -344,25 +346,32 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* User Profile / Auth Toggle */}
           {user.isLoggedIn ? (
             <div className="flex items-center gap-2 pl-2 border-l border-white/10">
-              <img
-                src={user.avatar}
-                alt={user.name}
-                className="w-8 h-8 rounded-lg object-cover ring-1 ring-cyan-500/40"
-              />
-              <div className="hidden xl:block text-left">
-                <p className="text-xs font-medium text-slate-200 truncate max-w-[100px]">
-                  {user.name}
-                </p>
-                <span className={`text-[10px] uppercase font-mono px-1 py-0.2 rounded ${
-                  user.role === 'admin' ? 'text-amber-400 bg-amber-500/10' : 'text-cyan-400 bg-cyan-500/10'
-                }`}>
-                  {user.role}
-                </span>
-              </div>
               <button
-                onClick={onOpenAuth}
-                title={t.nav.signOut}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+                onClick={onOpenProfile || onOpenAuth}
+                className="flex items-center gap-2 text-left group hover:opacity-90 transition-opacity"
+                title="ดูโปรไฟล์และประวัติการกดถูกใจ/บุ๊กมาร์ก/คอมเมนต์"
+              >
+                <img
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-8 h-8 rounded-lg object-cover ring-1 ring-cyan-500/40 group-hover:ring-cyan-400 transition-all"
+                />
+                <div className="hidden xl:block text-left">
+                  <p className="text-xs font-medium text-slate-200 group-hover:text-cyan-300 transition-colors truncate max-w-[100px]">
+                    {user.name}
+                  </p>
+                  <span className={`text-[10px] uppercase font-mono px-1 py-0.2 rounded ${
+                    user.role === 'admin' ? 'text-amber-400 bg-amber-500/10' : 'text-cyan-400 bg-cyan-500/10'
+                  }`}>
+                    {user.role}
+                  </span>
+                </div>
+              </button>
+
+              <button
+                onClick={onOpenProfile || onOpenAuth}
+                title="โปรไฟล์และประวัติของฉัน"
+                className="p-1.5 text-cyan-400 hover:text-cyan-200 rounded-lg hover:bg-cyan-500/15 border border-cyan-500/25 transition-colors"
               >
                 <User className="w-4 h-4" />
               </button>
