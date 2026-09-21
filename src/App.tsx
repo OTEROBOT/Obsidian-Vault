@@ -584,65 +584,67 @@ export default function App() {
     return counts;
   }, [comments]);
 
-  // Handlers - Intelligent Viewing & Interaction Tracker
-  const handleRecordView = (item: MediaItem) => {
+  // Handlers - Intelligent Viewing & Interaction Tracker (Memoized for zero scroll jitter)
+  const handleRecordView = useCallback((item: MediaItem) => {
     // 1. Record recently viewed with incremental viewCount & chronological ordering
     const updatedRecords = recordRecentlyViewed(item.id);
     setRecentRecords(updatedRecords);
 
     // 2. Increment local item viewsCount
     const newViewsCount = (item.viewsCount || 0) + 1;
-    const updated = items.map((i) =>
-      i.id === item.id ? { ...i, viewsCount: newViewsCount } : i
-    );
-    setItems(updated);
-    saveItems(updated);
+    setItems((prevItems) => {
+      const updated = prevItems.map((i) =>
+        i.id === item.id ? { ...i, viewsCount: newViewsCount } : i
+      );
+      saveItems(updated);
+      return updated;
+    });
 
     // 3. Patch view count directly to Supabase Cloud
     updateItemViewsInSupabase(item.id, newViewsCount).catch(() => {});
 
     return newViewsCount;
-  };
+  }, []);
 
-  const handleOpenPreview = (item: MediaItem) => {
+  const handleOpenPreview = useCallback((item: MediaItem) => {
     const newViewsCount = handleRecordView(item);
     setPreviewItem({ ...item, viewsCount: newViewsCount });
-  };
+  }, [handleRecordView]);
 
   // 1 Account = 1 Like Toggle System (Click to like, click again to remove like)
-  const handleLikeItem = (itemId: string) => {
-    const isLiked = userLikedItemIds.has(itemId);
-    const nextLikesSet = new Set<string>(userLikedItemIds);
-
+  const handleLikeItem = useCallback((itemId: string) => {
     let delta = 0;
-    if (isLiked) {
-      // Toggle OFF (Unlike)
-      nextLikesSet.delete(itemId);
-      delta = -1;
-      showToast('🤍 ยกเลิกการถูกใจแล้ว (-1)');
-    } else {
-      // Toggle ON (Like)
-      nextLikesSet.add(itemId);
-      delta = 1;
-      showToast('❤️ กดถูกใจรายการแล้ว (+1)');
-    }
-
-    // Persist per-account / per-device like state
-    setUserLikedItemIds(nextLikesSet);
-    saveUserLikes(user, Array.from(nextLikesSet));
-
-    // Update item likes count
     let newLikesCount = 0;
-    const updated = items.map((i) => {
-      if (i.id === itemId) {
-        newLikesCount = Math.max(0, (i.likesCount || 0) + delta);
-        return { ...i, likesCount: newLikesCount };
+
+    setUserLikedItemIds((prevSet) => {
+      const isLiked = prevSet.has(itemId);
+      const nextLikesSet = new Set<string>(prevSet);
+
+      if (isLiked) {
+        nextLikesSet.delete(itemId);
+        delta = -1;
+        showToast('🤍 ยกเลิกการถูกใจแล้ว (-1)');
+      } else {
+        nextLikesSet.add(itemId);
+        delta = 1;
+        showToast('❤️ กดถูกใจรายการแล้ว (+1)');
       }
-      return i;
+
+      saveUserLikes(user, Array.from(nextLikesSet));
+      return nextLikesSet;
     });
 
-    setItems(updated);
-    saveItems(updated);
+    setItems((prevItems) => {
+      const updated = prevItems.map((i) => {
+        if (i.id === itemId) {
+          newLikesCount = Math.max(0, (i.likesCount || 0) + delta);
+          return { ...i, likesCount: newLikesCount };
+        }
+        return i;
+      });
+      saveItems(updated);
+      return updated;
+    });
 
     // Sync likes count directly to Supabase Cloud
     updateItemLikesInSupabase(itemId, newLikesCount).catch((e) => {
@@ -650,13 +652,11 @@ export default function App() {
     });
 
     // Update active modal preview item if open
-    if (previewItem && previewItem.id === itemId) {
-      setPreviewItem((prev) => (prev ? { ...prev, likesCount: newLikesCount } : null));
-    }
-  };
+    setPreviewItem((prev) => (prev && prev.id === itemId ? { ...prev, likesCount: Math.max(0, (prev.likesCount || 0) + delta) } : prev));
+  }, [user]);
 
   // Toggle Bookmark Handler (Add/Remove from user's personal bookmarks)
-  const handleToggleBookmark = (itemId: string) => {
+  const handleToggleBookmark = useCallback((itemId: string) => {
     setUserBookmarkedItemIds((prev) => {
       const isBookmarked = prev.has(itemId);
       const nextSet = new Set<string>(prev);
@@ -670,7 +670,17 @@ export default function App() {
       saveUserBookmarks(user, Array.from(nextSet));
       return nextSet;
     });
-  };
+  }, [user]);
+
+  // Stable handlers for editing and tags to ensure MediaCard memoization
+  const handleEditItem = useCallback((it: MediaItem) => {
+    setEditingItem(it);
+    setIsAddEditOpen(true);
+  }, []);
+
+  const handleSelectTag = useCallback((tg: string) => {
+    setFilters((prev) => ({ ...prev, tag: tg }));
+  }, []);
 
   // Toggle Top 10 Popular Posts Slider (minimize/collapse to prevent clutter)
   const handleToggleTopTenCollapse = () => {
@@ -694,32 +704,36 @@ export default function App() {
     showToast('ล้างประวัติการเข้าชมทั้งหมดแล้ว');
   };
 
-  const handleTogglePin = (itemId: string) => {
+  const handleTogglePin = useCallback((itemId: string) => {
     if (!isRealAdmin) {
       showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
       return;
     }
-    const updated = items.map((i) =>
-      i.id === itemId ? { ...i, isPinned: !i.isPinned } : i
-    );
-    setItems(updated);
-    saveItems(updated);
+    setItems((prevItems) => {
+      const updated = prevItems.map((i) =>
+        i.id === itemId ? { ...i, isPinned: !i.isPinned } : i
+      );
+      saveItems(updated);
+      return updated;
+    });
     showToast(t.toasts.pinUpdated);
-  };
+  }, [isRealAdmin, t.toasts.permissionDenied, t.toasts.pinUpdated]);
 
-  const handleDeleteItem = (itemId: string) => {
+  const handleDeleteItem = useCallback((itemId: string) => {
     if (!isRealAdmin) {
       showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
       return;
     }
     markItemAsDeleted(itemId);
-    const updated = items.filter((i) => i.id !== itemId);
-    setItems(updated);
-    saveItems(updated);
+    setItems((prevItems) => {
+      const updated = prevItems.filter((i) => i.id !== itemId);
+      saveItems(updated);
+      return updated;
+    });
     deleteItemFromSupabase(itemId).catch((e) => console.warn('Supabase delete sync notice:', e));
-    if (previewItem?.id === itemId) setPreviewItem(null);
+    setPreviewItem((prev) => (prev?.id === itemId ? null : prev));
     showToast(t.toasts.entryRemoved);
-  };
+  }, [isRealAdmin, t.toasts.permissionDenied, t.toasts.entryRemoved]);
 
   const handleSaveLink = (data: Partial<MediaItem>) => {
     if (!isRealAdmin) {
@@ -1174,30 +1188,28 @@ export default function App() {
                 const category = categories.find((c) => c.id === item.categoryId);
                 const itemImageFit = cardImageFits[item.id] ?? globalImageFit;
                 return (
-                  <MediaCard
-                    key={item.id}
-                    item={item}
-                    category={category}
-                    user={user}
-                    commentCount={commentCountsMap[item.id] || 0}
-                    isLiked={userLikedItemIds.has(item.id)}
-                    isBookmarked={userBookmarkedItemIds.has(item.id)}
-                    viewMode={viewMode}
-                    imageFit={itemImageFit}
-                    matchReason={searchResult.matchReasons[item.id]}
-                    onToggleImageFit={handleToggleCardImageFit}
-                    onPreview={handleOpenPreview}
-                    onLike={handleLikeItem}
-                    onToggleBookmark={handleToggleBookmark}
-                    onRecordView={handleRecordView}
-                    onEdit={(it) => {
-                      setEditingItem(it);
-                      setIsAddEditOpen(true);
-                    }}
-                    onDelete={handleDeleteItem}
-                    onTogglePin={handleTogglePin}
-                    onSelectTag={(tg) => setFilters({ ...filters, tag: tg })}
-                  />
+                  <div key={item.id} className="virtual-card-item">
+                    <MediaCard
+                      item={item}
+                      category={category}
+                      user={user}
+                      commentCount={commentCountsMap[item.id] || 0}
+                      isLiked={userLikedItemIds.has(item.id)}
+                      isBookmarked={userBookmarkedItemIds.has(item.id)}
+                      viewMode={viewMode}
+                      imageFit={itemImageFit}
+                      matchReason={searchResult.matchReasons[item.id]}
+                      onToggleImageFit={handleToggleCardImageFit}
+                      onPreview={handleOpenPreview}
+                      onLike={handleLikeItem}
+                      onToggleBookmark={handleToggleBookmark}
+                      onRecordView={handleRecordView}
+                      onEdit={handleEditItem}
+                      onDelete={handleDeleteItem}
+                      onTogglePin={handleTogglePin}
+                      onSelectTag={handleSelectTag}
+                    />
+                  </div>
                 );
               })}
             </div>

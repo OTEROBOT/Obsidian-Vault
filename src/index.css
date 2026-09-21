@@ -78,9 +78,13 @@
               box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Stabilized virtual card container without WebKit content-visibility jumping */
+/* High-performance GPU-accelerated virtual card item for ultra-smooth 60-120fps scrolling */
 .virtual-card-item {
-  contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 380px;
+  contain: layout style paint;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 /* Touchscreen stability: prevent sticky hover transforms from causing jitter on iPad/tablets */

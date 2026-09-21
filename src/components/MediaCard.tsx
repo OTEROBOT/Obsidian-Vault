@@ -49,7 +49,7 @@ interface MediaCardProps {
   onSelectTag?: (tag: string) => void;
 }
 
-export const MediaCard: React.FC<MediaCardProps> = ({
+const MediaCardComponent: React.FC<MediaCardProps> = ({
   item,
   category,
   user,
@@ -173,7 +173,11 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     >
       {/* Thumbnail & Media Action Center */}
       <div 
-        className={`relative overflow-hidden bg-slate-950 cursor-pointer select-none transition-all ${
+        className={`relative overflow-hidden cursor-pointer select-none transition-all ${
+          currentImageFit === 'contain'
+            ? 'bg-[#08090f] bg-[radial-gradient(ellipse_at_center,_rgba(30,41,59,0.35)_0%,_rgba(9,10,15,0.95)_100%)]'
+            : 'bg-slate-950'
+        } ${
           viewMode === 'compact'
             ? 'w-full sm:w-64 md:w-72 shrink-0 aspect-[16/10] sm:aspect-auto sm:min-h-[170px]'
             : viewMode === 'large'
@@ -184,19 +188,6 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         }`}
         onClick={() => onPreview(item)}
       >
-        {/* Soft Ambient Glow when in 'contain' mode to eliminate blank black margins */}
-        {currentImageFit === 'contain' && (
-          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40 filter blur-xl scale-125">
-            <img
-              src={safeThumbnailUrl}
-              alt=""
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute inset-0 bg-slate-950/60" />
-          </div>
-        )}
-
         <img
           src={safeThumbnailUrl}
           alt={item.title}
@@ -237,7 +228,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <button
             type="button"
             onClick={handleCopyId}
-            className="group/id flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/80 hover:bg-black/95 text-cyan-300 hover:text-cyan-200 border border-cyan-500/40 hover:border-cyan-400 text-[11px] font-mono font-bold shadow-[0_4px_12px_rgba(0,0,0,0.6)] backdrop-blur-md transition-all active:scale-95 cursor-pointer touch-target select-none"
+            className="group/id flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/85 hover:bg-black text-cyan-300 hover:text-cyan-200 border border-cyan-500/40 hover:border-cyan-400 text-[11px] font-mono font-bold shadow-lg transition-all active:scale-95 cursor-pointer touch-target select-none"
             title={`รหัสโพสต์ #${displayId} (คลิกเพื่อคัดลอกรหัส)`}
             aria-label={`Post ID #${displayId}`}
           >
@@ -264,10 +255,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <button
             type="button"
             onClick={handleToggleFit}
-            className={`h-7 px-2 rounded-lg border text-[10px] font-medium flex items-center gap-1 backdrop-blur-md shadow-md transition-all touch-target ${
+            className={`h-7 px-2 rounded-lg border text-[10px] font-medium flex items-center gap-1 shadow-md transition-all touch-target cursor-pointer ${
               currentImageFit === 'contain'
-                ? 'bg-cyan-500/30 border-cyan-400/60 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
-                : 'bg-black/60 hover:bg-black/85 border-white/20 text-slate-300 hover:text-white'
+                ? 'bg-cyan-950/90 border-cyan-400/60 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                : 'bg-black/75 hover:bg-black/90 border-white/20 text-slate-300 hover:text-white'
             }`}
             title={currentImageFit === 'contain' ? 'คลิกเพื่อย่อรูปกลับเป็นขนาดมาตรฐาน (Fill Frame)' : 'คลิกเพื่อขยายดูภาพเต็มรูปไม่ตัดขอบ (Fit Full Image)'}
             aria-label="Toggle Image Fit"
@@ -294,7 +285,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                   e.stopPropagation();
                   setShowAdminMenu(!showAdminMenu);
                 }}
-                className="w-7 h-7 rounded-lg bg-black/60 hover:bg-black/85 text-slate-300 hover:text-white border border-white/20 flex items-center justify-center backdrop-blur-md shadow-md transition-colors touch-target"
+                className="w-7 h-7 rounded-lg bg-black/75 hover:bg-black/90 text-slate-300 hover:text-white border border-white/20 flex items-center justify-center shadow-md transition-colors touch-target cursor-pointer"
                 title={t.card.adminActions}
                 aria-label={t.card.adminActions}
               >
@@ -454,10 +445,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         {/* Card Footer: Metrics & Action Buttons in Harmonious Balance */}
         <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-2">
           
-          {/* Views, Likes, Comments */}
-          <div className="flex items-center gap-2 sm:gap-2.5 text-xs text-slate-400 shrink-0">
-            <span className="flex items-center gap-1 select-none" title={`${item.viewsCount} ${t.card.views}`}>
-              <Eye className="w-3.5 h-3.5 text-slate-500" />
+          {/* Views, Likes, Comments, Bookmarks */}
+          <div className="flex items-center gap-1 sm:gap-1.5 text-xs text-slate-400 min-w-0">
+            <span className="flex items-center gap-1 select-none text-slate-400 shrink-0" title={`${item.viewsCount} ${t.card.views}`}>
+              <Eye className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               <span className="font-mono text-[11px]">{item.viewsCount}</span>
             </span>
 
@@ -467,16 +458,16 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 e.stopPropagation();
                 onLike(item.id);
               }}
-              className={`h-7.5 inline-flex items-center gap-1.5 px-2 rounded-lg transition-all group/heart touch-target select-none ${
+              className={`h-8 inline-flex items-center gap-1 px-1.5 rounded-lg transition-all group/heart touch-target select-none cursor-pointer shrink-0 ${
                 isLiked
-                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.15)] font-semibold'
+                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 font-semibold shadow-[0_0_10px_rgba(244,63,94,0.15)]'
                   : 'hover:text-rose-400 hover:bg-white/5 border border-transparent text-slate-400'
               }`}
               title={isLiked ? 'ยกเลิกการถูกใจ (Unlike)' : `${item.likesCount || 0} ${t.card.likes}`}
               aria-label={isLiked ? 'Unlike' : 'Like'}
             >
               <Heart
-                className={`w-3.5 h-3.5 transition-transform duration-200 group-hover/heart:scale-125 ${
+                className={`w-3.5 h-3.5 transition-transform duration-200 group-hover/heart:scale-125 shrink-0 ${
                   isLiked
                     ? 'text-rose-500 fill-rose-500'
                     : 'text-slate-500 group-hover/heart:text-rose-400'
@@ -489,11 +480,14 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
             <button
               type="button"
-              onClick={() => onPreview(item)}
-              className="h-7.5 inline-flex items-center gap-1 px-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-white/5 transition-colors touch-target select-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview(item);
+              }}
+              className="h-8 inline-flex items-center gap-1 px-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-white/5 transition-colors touch-target select-none cursor-pointer shrink-0"
               title={`${commentCount} ${t.card.comments}`}
             >
-              <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+              <MessageSquare className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               <span className="font-mono text-[11px]">{commentCount}</span>
             </button>
 
@@ -504,16 +498,16 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                   e.stopPropagation();
                   onToggleBookmark(item.id);
                 }}
-                className={`h-7.5 inline-flex items-center gap-1 px-1.5 rounded-lg transition-all group/bm touch-target select-none ${
+                className={`w-8 h-8 inline-flex items-center justify-center rounded-lg transition-all group/bm touch-target select-none cursor-pointer shrink-0 ${
                   isBookmarked
-                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-semibold'
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold shadow-[0_0_10px_rgba(245,158,11,0.15)]'
                     : 'hover:text-amber-400 hover:bg-white/5 border border-transparent text-slate-400'
                 }`}
                 title={isBookmarked ? 'ลบออกจากบุ๊กมาร์ก (Bookmarked)' : 'บันทึกลงบุ๊กมาร์ก (Save Bookmark)'}
                 aria-label={isBookmarked ? 'Remove Bookmark' : 'Bookmark'}
               >
                 <Bookmark
-                  className={`w-3.5 h-3.5 transition-transform duration-200 group-hover/bm:scale-125 ${
+                  className={`w-3.5 h-3.5 transition-transform duration-200 group-hover/bm:scale-125 shrink-0 ${
                     isBookmarked
                       ? 'text-amber-400 fill-amber-400'
                       : 'text-slate-500 group-hover/bm:text-amber-400'
@@ -523,28 +517,17 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             )}
           </div>
 
-          {/* Action Buttons: Copy Link, Preview, External Link */}
+          {/* Action Buttons: Copy Link, External Link, Preview */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Copy Link Button */}
             <button
               type="button"
               onClick={handleCopyLink}
-              className="w-7.5 h-7.5 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10 transition-colors touch-target"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 border border-white/5 hover:border-white/15 transition-colors touch-target cursor-pointer"
               title={copied ? t.card.copied : t.card.copyUrl}
               aria-label="Copy Link"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-
-            {/* Embedded Preview Button */}
-            <button
-              type="button"
-              onClick={() => onPreview(item)}
-              className="h-7.5 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 transition-all shadow-sm touch-target"
-              title={t.card.openViewer}
-            >
-              <Maximize2 className="w-3 h-3 text-cyan-400" />
-              <span className="hidden sm:inline">{t.card.preview}</span>
             </button>
 
             {/* Direct External Link */}
@@ -552,13 +535,35 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => onRecordView?.(item)}
-              className="h-7.5 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-medium bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 transition-all touch-target"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRecordView?.(item);
+              }}
+              className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 border border-white/5 hover:border-white/15 transition-colors touch-target cursor-pointer"
               title={t.card.source}
+              aria-label="Source"
             >
-              <ExternalLink className="w-3 h-3 text-slate-400" />
-              <span className="hidden sm:inline">{t.card.source}</span>
+              <ExternalLink className="w-3.5 h-3.5" />
             </a>
+
+            {/* Embedded Preview Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview(item);
+              }}
+              className={`h-8 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/35 hover:border-cyan-400 transition-all shadow-sm touch-target select-none cursor-pointer ${
+                viewMode === 'large' ? 'px-3' : 'w-8 px-0'
+              }`}
+              title={t.card.openViewer}
+              aria-label="Preview"
+            >
+              <Maximize2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              {viewMode === 'large' && (
+                <span className="hidden sm:inline whitespace-nowrap font-medium text-xs">{t.card.preview}</span>
+              )}
+            </button>
           </div>
 
         </div>
@@ -567,4 +572,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     </div>
   );
 };
+
+export const MediaCard = React.memo(MediaCardComponent);
+
 
