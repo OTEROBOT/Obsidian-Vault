@@ -127,8 +127,27 @@ export default function App() {
 
   // Synchronize liked & bookmarked items whenever user identity or login status changes
   useEffect(() => {
-    setUserLikedItemIds(new Set(loadUserLikes(user)));
-    setUserBookmarkedItemIds(new Set(loadUserBookmarks(user)));
+    const likes = new Set(loadUserLikes(user));
+    const bookmarks = new Set(loadUserBookmarks(user));
+    setUserLikedItemIds(likes);
+    setUserBookmarkedItemIds(bookmarks);
+
+    // Reconcile items likesCount so any liked item has at least 1 like
+    setItems((prevItems) => {
+      let changed = false;
+      const updated = prevItems.map((it) => {
+        if (likes.has(it.id) && (!it.likesCount || it.likesCount === 0)) {
+          changed = true;
+          return { ...it, likesCount: 1 };
+        }
+        return it;
+      });
+      if (changed) {
+        saveItems(updated);
+        return updated;
+      }
+      return prevItems;
+    });
   }, [user.id, user.email, user.isLoggedIn]);
 
   // Strictly valid recently viewed records where the target item exists in repository
@@ -291,11 +310,39 @@ export default function App() {
             // Filter local items by deletedIds
             const validLocal = currentLocalItems.filter((loc) => !deletedIds.has(loc.id));
             const remoteMap = new Map(validRemote.map((r) => [r.id, r]));
+            const localMap = new Map<string, MediaItem>(validLocal.map((l) => [l.id, l]));
+            const userLikes = new Set(loadUserLikes(user));
+
+            // Merge remote items with local items: KEEP the highest likesCount and viewsCount
+            const mergedRemote = validRemote.map((r) => {
+              const local = localMap.get(r.id);
+              const isLiked = userLikes.has(r.id);
+              const mergedLikes = Math.max(
+                r.likesCount || 0,
+                local?.likesCount || 0,
+                isLiked ? 1 : 0
+              );
+              const mergedViews = Math.max(r.viewsCount || 0, local?.viewsCount || 0);
+
+              // If local had more likes than Supabase, update Supabase
+              if (mergedLikes > (r.likesCount || 0)) {
+                updateItemLikesInSupabase(r.id, mergedLikes).catch(() => {});
+              }
+
+              return {
+                ...r,
+                likesCount: mergedLikes,
+                viewsCount: mergedViews,
+              };
+            });
 
             // Only consider items that are truly custom local creations (NOT initial template items)
-            const localOnly = validLocal.filter(
-              (loc) => !remoteMap.has(loc.id) && !INITIAL_ITEMS.some((init) => init.id === loc.id)
-            );
+            const localOnly = validLocal
+              .filter((loc) => !remoteMap.has(loc.id) && !INITIAL_ITEMS.some((init) => init.id === loc.id))
+              .map((loc) => ({
+                ...loc,
+                likesCount: Math.max(loc.likesCount || 0, userLikes.has(loc.id) ? 1 : 0),
+              }));
 
             // Automatically sync any custom local-only items up to Supabase
             if (localOnly.length > 0) {
@@ -305,7 +352,7 @@ export default function App() {
             }
 
             // Combine remote items with custom local items
-            const combined = [...validRemote, ...localOnly];
+            const combined = [...mergedRemote, ...localOnly];
 
             // Maintain sorting & pinning
             combined.sort((a, b) => {
@@ -639,46 +686,54 @@ export default function App() {
 
   // 1 Account = 1 Like Toggle System (Click to like, click again to remove like)
   const handleLikeItem = useCallback((itemId: string) => {
-    let delta = 0;
-    let newLikesCount = 0;
-
     setUserLikedItemIds((prevSet) => {
-      const isLiked = prevSet.has(itemId);
+      const isCurrentlyLiked = prevSet.has(itemId);
       const nextLikesSet = new Set<string>(prevSet);
 
-      if (isLiked) {
+      if (isCurrentlyLiked) {
         nextLikesSet.delete(itemId);
-        delta = -1;
         showToast('🤍 ยกเลิกการถูกใจแล้ว (-1)');
       } else {
         nextLikesSet.add(itemId);
-        delta = 1;
         showToast('❤️ กดถูกใจรายการแล้ว (+1)');
       }
 
       saveUserLikes(user, Array.from(nextLikesSet));
+
+      // Calculate the exact target likes count deterministically
+      setItems((prevItems) => {
+        let finalLikesCount = 0;
+        const updated = prevItems.map((i) => {
+          if (i.id === itemId) {
+            const currentCount = i.likesCount || 0;
+            finalLikesCount = isCurrentlyLiked 
+              ? Math.max(0, currentCount - 1)
+              : Math.max(1, currentCount + 1);
+            return { ...i, likesCount: finalLikesCount };
+          }
+          return i;
+        });
+
+        saveItems(updated);
+
+        // Sync likes count directly to Supabase Cloud with guaranteed count
+        updateItemLikesInSupabase(itemId, finalLikesCount).catch((e) => {
+          console.warn('Supabase likes count update notice:', e);
+        });
+
+        return updated;
+      });
+
+      // Update active modal preview item if open
+      setPreviewItem((prev) => {
+        if (!prev || prev.id !== itemId) return prev;
+        const currentCount = prev.likesCount || 0;
+        const nextCount = isCurrentlyLiked ? Math.max(0, currentCount - 1) : Math.max(1, currentCount + 1);
+        return { ...prev, likesCount: nextCount };
+      });
+
       return nextLikesSet;
     });
-
-    setItems((prevItems) => {
-      const updated = prevItems.map((i) => {
-        if (i.id === itemId) {
-          newLikesCount = Math.max(0, (i.likesCount || 0) + delta);
-          return { ...i, likesCount: newLikesCount };
-        }
-        return i;
-      });
-      saveItems(updated);
-      return updated;
-    });
-
-    // Sync likes count directly to Supabase Cloud
-    updateItemLikesInSupabase(itemId, newLikesCount).catch((e) => {
-      console.warn('Supabase likes count update notice:', e);
-    });
-
-    // Update active modal preview item if open
-    setPreviewItem((prev) => (prev && prev.id === itemId ? { ...prev, likesCount: Math.max(0, (prev.likesCount || 0) + delta) } : prev));
   }, [user]);
 
   // Toggle Bookmark Handler (Add/Remove from user's personal bookmarks)

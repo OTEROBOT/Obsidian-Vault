@@ -462,7 +462,7 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
                 }`}
               />
               <span className={`font-mono text-[11px] ${isLiked ? 'text-rose-300 font-bold' : ''}`}>
-                {item.likesCount || 0}
+                {Math.max(item.likesCount || 0, isLiked ? 1 : 0)}
               </span>
             </button>
 

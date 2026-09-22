@@ -608,7 +608,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
               >
                 <Heart className={`w-4 h-4 transition-transform duration-200 ${isLiked ? 'fill-rose-500 text-rose-500 scale-110' : 'text-slate-400'}`} />
                 <span>
-                  {isLiked ? 'ถูกใจแล้ว (คลิกเพื่อยกเลิก)' : t.card.likes} ({item.likesCount || 0})
+                  {isLiked ? 'ถูกใจแล้ว (คลิกเพื่อยกเลิก)' : t.card.likes} ({Math.max(item.likesCount || 0, isLiked ? 1 : 0)})
                 </span>
               </button>
 

@@ -145,6 +145,16 @@ export function loadItems(): MediaItem[] {
       }
     }
 
+    // Reconcile likes count: if item is liked by the user, ensure it has at least 1 like
+    const likedSet = new Set(loadUserLikes());
+    parsedList = parsedList.map((it) => {
+      const curLikes = it.likesCount || 0;
+      if (likedSet.has(it.id) && curLikes === 0) {
+        return { ...it, likesCount: 1 };
+      }
+      return it;
+    });
+
     // Assign clean sequential numbers and decode HTML entities
     const assigned = assignSequentialItemNumbers(parsedList);
     return assigned;
@@ -327,11 +337,40 @@ export function getUserLikesKey(user?: UserProfile): string {
 
 export function loadUserLikes(user?: UserProfile): string[] {
   try {
-    const key = getUserLikesKey(user);
-    const raw = storage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const primaryKey = getUserLikesKey(user);
+    const allLiked = new Set<string>();
+
+    // 1. Read from primary key
+    const primaryRaw = storage.getItem(primaryKey);
+    if (primaryRaw) {
+      try {
+        const parsed = JSON.parse(primaryRaw);
+        if (Array.isArray(parsed)) parsed.forEach((id) => allLiked.add(id));
+      } catch {}
+    }
+
+    // 2. Also check guest keys & legacy keys to ensure no likes are ever lost across login sessions
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k && (k.startsWith('obsidian_vault_likes_') || k === 'obsidian_vault_user_likes_v1')) {
+            const raw = window.localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) parsed.forEach((id) => allLiked.add(id));
+            }
+          }
+        }
+      }
+    } catch {}
+
+    const result = Array.from(allLiked);
+    // If user is logged in and we found guest likes, sync them to user's key
+    if (user && user.isLoggedIn && user.email && result.length > 0) {
+      storage.setItem(primaryKey, JSON.stringify(result));
+    }
+    return result;
   } catch (e) {
     return [];
   }
@@ -341,6 +380,11 @@ export function saveUserLikes(user: UserProfile, likedIds: string[]): void {
   try {
     const key = getUserLikesKey(user);
     storage.setItem(key, JSON.stringify(likedIds));
+    // Also mirror to guest key for consistency if guest UID exists
+    const guestId = storage.getItem('obsidian_vault_guest_uid');
+    if (guestId) {
+      storage.setItem(`obsidian_vault_likes_${guestId}`, JSON.stringify(likedIds));
+    }
   } catch (e) {
     console.error('Failed to save user likes:', e);
   }
@@ -360,11 +404,37 @@ export function getUserBookmarksKey(user?: UserProfile): string {
 
 export function loadUserBookmarks(user?: UserProfile): string[] {
   try {
-    const key = getUserBookmarksKey(user);
-    const raw = storage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const primaryKey = getUserBookmarksKey(user);
+    const allBookmarks = new Set<string>();
+
+    const primaryRaw = storage.getItem(primaryKey);
+    if (primaryRaw) {
+      try {
+        const parsed = JSON.parse(primaryRaw);
+        if (Array.isArray(parsed)) parsed.forEach((id) => allBookmarks.add(id));
+      } catch {}
+    }
+
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k && (k.startsWith('obsidian_vault_bookmarks_') || k === 'obsidian_vault_bookmarks')) {
+            const raw = window.localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) parsed.forEach((id) => allBookmarks.add(id));
+            }
+          }
+        }
+      }
+    } catch {}
+
+    const result = Array.from(allBookmarks);
+    if (user && user.isLoggedIn && user.email && result.length > 0) {
+      storage.setItem(primaryKey, JSON.stringify(result));
+    }
+    return result;
   } catch (e) {
     return [];
   }
@@ -374,6 +444,10 @@ export function saveUserBookmarks(user: UserProfile, bookmarkedIds: string[]): v
   try {
     const key = getUserBookmarksKey(user);
     storage.setItem(key, JSON.stringify(bookmarkedIds));
+    const guestId = storage.getItem('obsidian_vault_guest_uid');
+    if (guestId) {
+      storage.setItem(`obsidian_vault_bookmarks_${guestId}`, JSON.stringify(bookmarkedIds));
+    }
   } catch (e) {
     console.error('Failed to save user bookmarks:', e);
   }

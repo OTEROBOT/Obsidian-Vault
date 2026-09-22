@@ -41,12 +41,15 @@ export const TopTenSlider: React.FC<TopTenSliderProps> = ({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
-  // Compute Top 10 items based on like count, then views count, then newest
+  // Compute Top 10 items based on like count (including user's active likes), then views count, then newest
   const topTenItems = React.useMemo(() => {
     const list = [...items];
     list.sort((a, b) => {
-      const likesA = a.likesCount || 0;
-      const likesB = b.likesCount || 0;
+      const isLikedA = userLikedItemIds.has(a.id);
+      const isLikedB = userLikedItemIds.has(b.id);
+      const likesA = Math.max(a.likesCount || 0, isLikedA ? 1 : 0);
+      const likesB = Math.max(b.likesCount || 0, isLikedB ? 1 : 0);
+
       if (likesB !== likesA) return likesB - likesA;
       const viewsA = a.viewsCount || 0;
       const viewsB = b.viewsCount || 0;
@@ -54,7 +57,7 @@ export const TopTenSlider: React.FC<TopTenSliderProps> = ({
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
     return list.slice(0, 10);
-  }, [items]);
+  }, [items, userLikedItemIds]);
 
   const checkScrollButtons = () => {
     const el = scrollContainerRef.current;
@@ -261,7 +264,7 @@ export const TopTenSlider: React.FC<TopTenSliderProps> = ({
                   {/* Likes pill on thumbnail */}
                   <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-950/80 backdrop-blur-md border border-rose-500/30 text-rose-300 text-[11px] font-mono font-bold z-10">
                     <Heart className="w-3 h-3 fill-rose-500 text-rose-500" />
-                    <span>{item.likesCount || 0}</span>
+                    <span>{Math.max(item.likesCount || 0, isLiked ? 1 : 0)}</span>
                   </div>
 
                   {/* Media Type pill */}
