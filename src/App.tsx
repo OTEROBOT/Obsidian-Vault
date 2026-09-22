@@ -76,6 +76,13 @@ import {
   deleteTagFromSupabase,
   fetchConfigFromSupabase,
   saveConfigToSupabase,
+  fetchCommentsFromSupabase,
+  saveCommentToSupabase,
+  deleteCommentFromSupabase,
+  mapRowToComment,
+  fetchUserInteractionsFromSupabase,
+  saveUserInteractionsToSupabase,
+  getUserDataItemId,
   SYSTEM_CONFIG_ITEM_ID,
   mapSupabaseUserToProfile,
   signOutSupabaseAuth,
@@ -131,16 +138,57 @@ export default function App() {
 
   // Synchronize liked & bookmarked items whenever user identity or login status changes
   useEffect(() => {
-    const likes = new Set(loadUserLikes(user));
-    const bookmarks = new Set(loadUserBookmarks(user));
-    setUserLikedItemIds(likes);
-    setUserBookmarkedItemIds(bookmarks);
+    const localLikes = new Set(loadUserLikes(user));
+    const localBookmarks = new Set(loadUserBookmarks(user));
+    setUserLikedItemIds(localLikes);
+    setUserBookmarkedItemIds(localBookmarks);
+
+    // If user is logged in with an email, synchronize with Supabase Cloud interactions
+    if (user.isLoggedIn && user.email) {
+      fetchUserInteractionsFromSupabase(user.email).then((cloudData) => {
+        if (cloudData) {
+          const mergedLikes = new Set([...Array.from(localLikes), ...(cloudData.likes || [])]);
+          const mergedBookmarks = new Set([...Array.from(localBookmarks), ...(cloudData.bookmarks || [])]);
+
+          setUserLikedItemIds(mergedLikes);
+          setUserBookmarkedItemIds(mergedBookmarks);
+          saveUserLikes(user, Array.from(mergedLikes));
+          saveUserBookmarks(user, Array.from(mergedBookmarks));
+
+          // Also reconcile items likesCount with mergedLikes
+          setItems((prevItems) => {
+            let changed = false;
+            const updated = prevItems.map((it) => {
+              if (mergedLikes.has(it.id) && (!it.likesCount || it.likesCount === 0)) {
+                changed = true;
+                return { ...it, likesCount: 1 };
+              }
+              return it;
+            });
+            if (changed) {
+              saveItems(updated);
+              return updated;
+            }
+            return prevItems;
+          });
+
+          // If local had new items not yet in cloud, push merged set back to cloud
+          if (localLikes.size > (cloudData.likes?.length || 0) || localBookmarks.size > (cloudData.bookmarks?.length || 0)) {
+            saveUserInteractionsToSupabase(user.email, Array.from(mergedLikes), Array.from(mergedBookmarks)).catch(() => {});
+          }
+        } else if (localLikes.size > 0 || localBookmarks.size > 0) {
+          saveUserInteractionsToSupabase(user.email, Array.from(localLikes), Array.from(localBookmarks)).catch(() => {});
+        }
+      }).catch((err) => {
+        console.warn('User cloud interactions sync warning:', err);
+      });
+    }
 
     // Reconcile items likesCount so any liked item has at least 1 like
     setItems((prevItems) => {
       let changed = false;
       const updated = prevItems.map((it) => {
-        if (likes.has(it.id) && (!it.likesCount || it.likesCount === 0)) {
+        if (localLikes.has(it.id) && (!it.likesCount || it.likesCount === 0)) {
           changed = true;
           return { ...it, likesCount: 1 };
         }
@@ -453,7 +501,31 @@ export default function App() {
       })
       .catch((err) => console.warn('Config fetch warning:', err));
 
-    // 4. Supabase Realtime Live Synchronization (PC <-> iPad <-> Mobile)
+    // 4. Comments sync from Supabase cloud database
+    fetchCommentsFromSupabase()
+      .then((remoteComments) => {
+        if (remoteComments && remoteComments.length > 0) {
+          setComments((localComments) => {
+            const commentMap = new Map<string, Comment>();
+            localComments.forEach((c) => commentMap.set(c.id, c));
+            remoteComments.forEach((c) => commentMap.set(c.id, c));
+            const merged = Array.from(commentMap.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            saveComments(merged);
+            return merged;
+          });
+        } else {
+          // If Supabase has no comments yet, push any local comments to Supabase
+          const localStored = loadComments();
+          if (localStored && localStored.length > 0) {
+            localStored.forEach((c) => saveCommentToSupabase(c).catch(() => {}));
+          }
+        }
+      })
+      .catch((err) => console.warn('Comments fetch warning:', err));
+
+    // 5. Supabase Realtime Live Synchronization (PC <-> iPad <-> Brave <-> Mobile)
     const realtimeItemsChannel = supabase
       .channel('vault_realtime_items_and_config')
       .on(
@@ -476,6 +548,23 @@ export default function App() {
               }
             } catch (err) {
               console.warn('Realtime config parse error:', err);
+            }
+          } else if (newRow && typeof newRow.id === 'string' && newRow.id.startsWith('user_data_')) {
+            try {
+              if (newRow.description) {
+                const parsed = JSON.parse(newRow.description);
+                const currentUserDataId = user.email ? getUserDataItemId(user.email) : '';
+                if (newRow.id === currentUserDataId && parsed) {
+                  const cloudLikes = new Set<string>(parsed.likes || []);
+                  const cloudBookmarks = new Set<string>(parsed.bookmarks || []);
+                  setUserLikedItemIds(cloudLikes);
+                  setUserBookmarkedItemIds(cloudBookmarks);
+                  saveUserLikes(user, Array.from(cloudLikes));
+                  saveUserBookmarks(user, Array.from(cloudBookmarks));
+                }
+              }
+            } catch (err) {
+              console.warn('Realtime user data parse error:', err);
             }
           }
         }
@@ -502,11 +591,43 @@ export default function App() {
       )
       .subscribe();
 
+    const realtimeCommentsChannel = supabase
+      .channel('vault_realtime_comments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vault_comments' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const row = payload.new as any;
+            if (row) {
+              const newComment = mapRowToComment(row);
+              setComments((prev) => {
+                if (prev.some((c) => c.id === newComment.id)) return prev;
+                const next = [newComment, ...prev];
+                saveComments(next);
+                return next;
+              });
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const oldRow = payload.old as any;
+            if (oldRow?.id) {
+              setComments((prev) => {
+                const next = prev.filter((c) => c.id !== oldRow.id);
+                saveComments(next);
+                return next;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(realtimeItemsChannel);
       supabase.removeChannel(realtimeConfigTableChannel);
+      supabase.removeChannel(realtimeCommentsChannel);
     };
-  }, []);
+  }, [user.email]);
 
   // Intelligent Google-grade Search offloaded to Web Worker to keep main thread at 60-120 FPS
   const [searchResult, setSearchResult] = useState<IntelligentSearchResult>(() => {
@@ -697,6 +818,15 @@ export default function App() {
 
       saveUserLikes(user, Array.from(nextLikesSet));
 
+      // Sync user profile likes & bookmarks to Supabase Cloud immediately
+      if (user.isLoggedIn && user.email) {
+        saveUserInteractionsToSupabase(
+          user.email,
+          Array.from(nextLikesSet),
+          Array.from(userBookmarkedItemIds)
+        ).catch((e) => console.warn('Supabase cloud likes sync error:', e));
+      }
+
       // Calculate the exact target likes count deterministically
       setItems((prevItems) => {
         let finalLikesCount = 0;
@@ -746,9 +876,19 @@ export default function App() {
         showToast('🔖 บันทึกลงบุ๊กมาร์กเรียบร้อยแล้ว');
       }
       saveUserBookmarks(user, Array.from(nextSet));
+
+      // Sync user profile likes & bookmarks to Supabase Cloud immediately
+      if (user.isLoggedIn && user.email) {
+        saveUserInteractionsToSupabase(
+          user.email,
+          Array.from(userLikedItemIds),
+          Array.from(nextSet)
+        ).catch((e) => console.warn('Supabase cloud bookmarks sync error:', e));
+      }
+
       return nextSet;
     });
-  }, [user]);
+  }, [user, userLikedItemIds]);
 
   // Stable handlers for editing and tags to ensure MediaCard memoization
   const handleEditItem = useCallback((it: MediaItem) => {
@@ -890,6 +1030,9 @@ export default function App() {
     const updated = [newComment, ...comments];
     setComments(updated);
     saveComments(updated);
+    saveCommentToSupabase(newComment).catch((err) => {
+      console.warn('Supabase comment insert notice:', err);
+    });
     showToast(t.toasts.commentPublished);
   };
 
@@ -909,6 +1052,9 @@ export default function App() {
     const updated = comments.filter((c) => c.id !== commentId);
     setComments(updated);
     saveComments(updated);
+    deleteCommentFromSupabase(commentId).catch((err) => {
+      console.warn('Supabase comment delete notice:', err);
+    });
     showToast(t.toasts.commentDeleted);
   };
 

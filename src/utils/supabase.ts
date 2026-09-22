@@ -249,6 +249,7 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
       .from('vault_items')
       .select('*')
       .neq('id', SYSTEM_CONFIG_ITEM_ID)
+      .not('id', 'like', 'user_data_%')
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -257,7 +258,7 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
       return null;
     }
     return (data || [])
-      .filter((row) => row.id !== SYSTEM_CONFIG_ITEM_ID)
+      .filter((row) => row.id !== SYSTEM_CONFIG_ITEM_ID && !row.id.startsWith('user_data_') && !row.tags?.includes('system-user-data'))
       .map(mapRowToItem);
   } catch (e) {
     console.warn('Supabase items exception:', e);
@@ -266,7 +267,7 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
 }
 
 export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
-  if (item.id === SYSTEM_CONFIG_ITEM_ID) {
+  if (item.id === SYSTEM_CONFIG_ITEM_ID || item.id.startsWith('user_data_')) {
     return false;
   }
   try {
@@ -284,7 +285,7 @@ export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
 }
 
 export async function deleteItemFromSupabase(id: string): Promise<boolean> {
-  if (id === SYSTEM_CONFIG_ITEM_ID) {
+  if (id === SYSTEM_CONFIG_ITEM_ID || id.startsWith('user_data_')) {
     return false;
   }
   try {
@@ -606,6 +607,118 @@ export async function deleteCommentFromSupabase(id: string): Promise<boolean> {
     const { error } = await supabase.from('vault_comments').delete().eq('id', id);
     return !error;
   } catch {
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// User Profile Interactions Sync (Likes, Bookmarks across Devices & Browsers)
+// ----------------------------------------------------
+
+export interface UserInteractionsCloudData {
+  email: string;
+  likes: string[];
+  bookmarks: string[];
+  updatedAt: string;
+}
+
+export function getUserDataItemId(email: string): string {
+  return 'user_data_' + email.toLowerCase().trim().replace(/[^a-z0-9_-]/gi, '_');
+}
+
+export async function fetchUserInteractionsFromSupabase(email: string): Promise<UserInteractionsCloudData | null> {
+  if (!email) return null;
+  const cleanEmail = email.toLowerCase().trim();
+  const id = getUserDataItemId(cleanEmail);
+
+  try {
+    const { data, error } = await supabase
+      .from('vault_items')
+      .select('description')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!error && data?.description) {
+      try {
+        const parsed = JSON.parse(data.description);
+        return {
+          email: cleanEmail,
+          likes: Array.isArray(parsed.likes) ? parsed.likes : [],
+          bookmarks: Array.isArray(parsed.bookmarks) ? parsed.bookmarks : [],
+          updatedAt: parsed.updatedAt || new Date().toISOString(),
+        };
+      } catch {
+        // Continue to fallback
+      }
+    }
+
+    // Fallback: If no user sync record exists yet, check if there are any items with likes_count > 0 in Supabase
+    // to auto-recover likes for the vault admin/owner
+    const { data: likedRows } = await supabase
+      .from('vault_items')
+      .select('id')
+      .gt('likes_count', 0)
+      .not('id', 'like', 'user_data_%')
+      .neq('id', SYSTEM_CONFIG_ITEM_ID);
+
+    if (likedRows && likedRows.length > 0) {
+      const recoveredLikes = likedRows.map((r) => r.id);
+      return {
+        email: cleanEmail,
+        likes: recoveredLikes,
+        bookmarks: [],
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('Fetch user interactions exception:', err);
+    return null;
+  }
+}
+
+export async function saveUserInteractionsToSupabase(
+  email: string,
+  likes: string[],
+  bookmarks: string[]
+): Promise<boolean> {
+  if (!email) return false;
+  const cleanEmail = email.toLowerCase().trim();
+  const id = getUserDataItemId(cleanEmail);
+
+  const payload: UserInteractionsCloudData = {
+    email: cleanEmail,
+    likes: Array.from(new Set(likes)),
+    bookmarks: Array.from(new Set(bookmarks)),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const row = {
+    id,
+    title: `USER_INTERACTIONS_${cleanEmail}`,
+    description: JSON.stringify(payload),
+    url: `https://obsidianvault.internal/userdata/${encodeURIComponent(cleanEmail)}`,
+    media_type: 'web',
+    category_id: 'tech',
+    tags: ['system-user-data'],
+    source: 'system',
+    created_by: cleanEmail,
+    views_count: 0,
+    likes_count: 0,
+    is_pinned: false,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const { error } = await supabase.from('vault_items').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.warn('Supabase save user interactions error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase save user interactions exception:', e);
     return false;
   }
 }
