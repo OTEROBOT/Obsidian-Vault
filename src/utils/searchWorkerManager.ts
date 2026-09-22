@@ -4,6 +4,8 @@ import type { SearchWorkerRequest, SearchWorkerResponse } from '../workers/searc
 
 let worker: Worker | null = null;
 let currentRequestId = 0;
+let lastItemsRef: MediaItem[] = [];
+let lastQueryRef = '';
 const pendingCallbacks = new Map<number, (res: IntelligentSearchResult) => void>();
 
 function getWorker(): Worker | null {
@@ -25,6 +27,15 @@ function getWorker(): Worker | null {
       });
       worker.addEventListener('error', (err) => {
         console.warn('Search worker error, falling back to main thread:', err);
+        for (const [, cb] of pendingCallbacks) {
+          try {
+            cb(intelligentSearch(lastItemsRef, lastQueryRef));
+          } catch {
+            // fallback
+          }
+        }
+        pendingCallbacks.clear();
+        worker = null;
       });
     } catch {
       worker = null;
@@ -42,6 +53,9 @@ export function runIntelligentSearch(
   query: string
 ): Promise<IntelligentSearchResult> {
   const trimmed = (query || '').trim();
+  lastItemsRef = items;
+  lastQueryRef = trimmed;
+
   if (!trimmed) {
     return Promise.resolve({
       items,
