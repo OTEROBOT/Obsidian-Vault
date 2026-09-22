@@ -56,15 +56,22 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   };
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    // If transformed URL failed, try original raw src
+    if (currentSrc !== src) {
+      setCurrentSrc(src);
+      return;
+    }
+    // If original failed and fallback provided, try fallback
     if (fallbackSrc && currentSrc !== fallbackSrc) {
       setCurrentSrc(fallbackSrc);
       return;
     }
     setHasError(true);
+    setIsLoaded(true); // Stop skeleton pulsing
     onError?.(e);
   };
 
-  // Generate responsive srcset
+  // Generate responsive srcset only when supported
   const srcSet = generateResponsiveSrcSet(currentSrc, [400, 800, 1200]);
   const defaultOptimizedUrl = getOptimizedImageUrl(currentSrc, { width: priority ? 1200 : 800 });
 
@@ -74,7 +81,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
       style={aspectRatio ? { aspectRatio } : undefined}
     >
       {/* 1. Low-Quality Image Placeholder (LQIP) / Shimmer Skeleton to eliminate CLS */}
-      {enableBlurUp && !isLoaded && (
+      {enableBlurUp && !isLoaded && !hasError && (
         <div
           aria-hidden="true"
           className="absolute inset-0 z-0 bg-[#0d1017] bg-gradient-to-r from-slate-900/80 via-slate-800/40 to-slate-900/80 animate-pulse pointer-events-none"
@@ -95,32 +102,54 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
         </div>
       )}
 
-      {/* 2. Main High-Performance Image Element */}
+      {/* 2. Error Fallback Card if image fails completely */}
+      {hasError && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/90 text-slate-500 p-2 text-center select-none">
+          <svg
+            className="w-8 h-8 text-cyan-500/40 mb-1"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+            <circle cx="9" cy="9" r="2" />
+            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+          </svg>
+          <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">{alt || 'Image Preview'}</span>
+        </div>
+      )}
+
+      {/* 3. Main High-Performance Image Element */}
       <picture>
-        {/* Modern format sources if external CDN or optimizer supports WebP/AVIF */}
-        <source
-          type="image/avif"
-          srcSet={generateResponsiveSrcSet(currentSrc, [400, 800, 1200])}
-          sizes={sizes}
-        />
-        <source
-          type="image/webp"
-          srcSet={srcSet}
-          sizes={sizes}
-        />
+        {srcSet ? (
+          <>
+            <source
+              type="image/avif"
+              srcSet={srcSet}
+              sizes={sizes}
+            />
+            <source
+              type="image/webp"
+              srcSet={srcSet}
+              sizes={sizes}
+            />
+          </>
+        ) : null}
         <img
           ref={imgRef}
-          src={defaultOptimizedUrl}
+          src={defaultOptimizedUrl || currentSrc}
           srcSet={srcSet || undefined}
           sizes={srcSet ? sizes : undefined}
           alt={alt}
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
+          referrerPolicy="no-referrer"
           fetchPriority={priority ? 'high' : 'auto'}
           onLoad={handleImageLoad}
           onError={handleImageError}
           className={`w-full h-full transition-opacity duration-300 ease-out transform-gpu will-change-transform ${
-            isLoaded ? 'opacity-100' : 'opacity-0'
+            isLoaded && !hasError ? 'opacity-100' : 'opacity-0'
           } ${
             objectFit === 'contain'
               ? 'object-contain'

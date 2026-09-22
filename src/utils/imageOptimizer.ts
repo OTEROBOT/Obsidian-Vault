@@ -58,27 +58,14 @@ export function getOptimizedImageUrl(url: string, options: ImageOptimizationOpti
       return u.toString();
     }
 
-    // 5. Internal Pixiv Image Proxy
+    // 5. Internal Pixiv Image Proxy (only in development or if hosted backend exists)
     if (url.startsWith('/api/pixiv-image')) {
-      const u = new URL(url, 'http://localhost:3000');
-      if (width) u.searchParams.set('w', width.toString());
-      if (quality) u.searchParams.set('q', quality.toString());
-      if (format && format !== 'auto') u.searchParams.set('fmt', format);
-      return `${u.pathname}${u.search}`;
+      return url;
     }
 
-    // 6. External generic HTTP/HTTPS images:
-    // When width or format optimization is requested, route through the server-side Sharp optimizer
-    if ((url.startsWith('http://') || url.startsWith('https://')) && (width || format !== 'auto')) {
-      const params = new URLSearchParams();
-      params.set('url', url);
-      if (width) params.set('w', width.toString());
-      if (height) params.set('h', height.toString());
-      if (quality) params.set('q', quality.toString());
-      if (format && format !== 'auto') params.set('fmt', format);
-      return `/api/optimize-image?${params.toString()}`;
-    }
-
+    // 6. Generic external HTTP/HTTPS images:
+    // Return original URL directly without rewriting to server-side endpoints
+    // to ensure 100% compatibility across static hosts (Vercel, GitHub Pages) and prevent 404s
     return url;
   } catch {
     return url;
@@ -86,7 +73,7 @@ export function getOptimizedImageUrl(url: string, options: ImageOptimizationOpti
 }
 
 /**
- * Generates a standard responsive `srcSet` string for various screen widths (e.g. 400w, 800w, 1200w)
+ * Generates a standard responsive `srcSet` string for supported CDNs (e.g. Unsplash)
  */
 export function generateResponsiveSrcSet(
   url: string,
@@ -94,6 +81,12 @@ export function generateResponsiveSrcSet(
   quality = 80
 ): string {
   if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.endsWith('.svg')) {
+    return '';
+  }
+
+  // Only generate srcset if the URL is from a CDN that actually supports dynamic resizing query parameters!
+  const isCdn = url.includes('images.unsplash.com') || url.includes('s0.wp.com/mshots/v1/');
+  if (!isCdn) {
     return '';
   }
 

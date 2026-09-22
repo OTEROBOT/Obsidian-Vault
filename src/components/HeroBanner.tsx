@@ -282,7 +282,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 {/* Ambient Blurred Backdrop */}
                 <div 
                   className="absolute inset-0 bg-cover bg-center filter blur-2xl scale-125 opacity-40 transition-all duration-700 pointer-events-none"
-                  style={{ backgroundImage: `url(${getOptimizedImageUrl(activeSlide.imageUrl, { width: 300, quality: 50 })})` }}
+                  style={{ backgroundImage: `url(${getOptimizedImageUrl(activeSlide.imageUrl, { width: 300, quality: 50 }) || 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80'})` }}
                 />
                 {/* Sharp Contained Center Image */}
                 <img
@@ -290,6 +290,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                   alt={activeSlide.title || 'Banner'}
                   decoding="async"
                   loading="eager"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80';
+                  }}
                   className="w-full h-full object-contain relative z-10 transition-transform duration-300 pointer-events-none"
                   style={{
                     transform: `scale(${isRepositioning ? dragScale : (activeSlide.scale ?? 1)})`,
@@ -304,6 +308,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 alt={activeSlide.title || 'Banner'}
                 decoding="async"
                 loading="eager"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80';
+                }}
                 className="w-full h-full object-cover relative z-0 transition-transform duration-150 pointer-events-none"
                 style={{
                   transform: (isRepositioning ? dragScale : (activeSlide.scale ?? 1)) !== 1

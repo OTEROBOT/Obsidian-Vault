@@ -681,6 +681,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
                     src={thumbnailUrl}
                     alt="Thumbnail preview"
                     className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       if (!target.dataset.failed) {
@@ -759,6 +760,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
                           alt={`Discovered ${idx + 1}`} 
                           className="w-full h-full object-cover" 
                           loading="lazy"
+                          referrerPolicy="no-referrer"
                           onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                         />
                         {isSelected && (

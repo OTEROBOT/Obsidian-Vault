@@ -346,6 +346,14 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
               loading="lazy"
               decoding="async"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                if (item.thumbnailUrl && target.src !== item.thumbnailUrl) {
+                  target.src = item.thumbnailUrl;
+                } else {
+                  target.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80';
+                }
+              }}
               style={{ 
                 transform: `translate3d(0, 0, 0) scale(${imageZoom})`, 
                 transition: 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
