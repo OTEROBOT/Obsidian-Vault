@@ -19,6 +19,7 @@ import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import { ADMIN_EMAIL } from '../utils/supabase';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   user: UserProfile;
@@ -342,6 +343,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden lg:inline">{t.nav.addLink}</span>
             </button>
           )}
+
+          {/* PWA Install Button (Chromium, Android & iOS Safari) */}
+          <PWAInstallButton compact={true} className="hidden sm:flex" />
 
           {/* User Profile / Auth Toggle */}
           {user.isLoggedIn ? (

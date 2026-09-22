@@ -27,6 +27,7 @@ import { getDomainFromUrl, safeConfirm } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
 import { isPixiv, isTwitterOrX, getSafeImageUrl, getPixivIllustId } from '../utils/mediaProxy';
 import { decodeHtmlEntities } from '../utils/text';
+import { OptimizedImage } from './OptimizedImage';
 
 interface MediaCardProps {
   item: MediaItem;
@@ -188,35 +189,22 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
         }`}
         onClick={() => onPreview(item)}
       >
-        <img
+        <OptimizedImage
           src={safeThumbnailUrl}
           alt={item.title}
-          loading="lazy"
-          decoding="async"
+          fallbackSrc={
+            illustId
+              ? `https://embed.pixiv.net/decorate.php?illust_id=${illustId}`
+              : `https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=800&h=450`
+          }
+          containerClassName="w-full h-full"
+          objectFit={currentImageFit}
           referrerPolicy="no-referrer"
           className={`w-full h-full transform-gpu will-change-transform transition-all duration-300 ease-out ${
             currentImageFit === 'contain'
-              ? 'object-contain relative z-10 p-2 sm:p-3'
-              : 'object-cover object-center group-hover:scale-105'
+              ? 'relative z-10 p-2 sm:p-3'
+              : 'group-hover:scale-105'
           }`}
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            if (!target.dataset.failed) {
-              if (illustId) {
-                target.dataset.failed = 'pixiv-decorate';
-                target.src = `https://embed.pixiv.net/decorate.php?illust_id=${illustId}`;
-              } else {
-                target.dataset.failed = 'snapshot';
-                target.src = `https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=800&h=450`;
-              }
-            } else if (target.dataset.failed === 'pixiv-decorate') {
-              target.dataset.failed = 'snapshot';
-              target.src = `https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=800&h=450`;
-            } else if (target.dataset.failed === 'snapshot') {
-              target.dataset.failed = 'final';
-              target.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80';
-            }
-          }}
         />
 
         {/* Gradient Overlay */}

@@ -83,22 +83,25 @@ import {
 } from './utils/supabase';
 import { INITIAL_USER, INITIAL_ITEMS } from './data/initialData';
 import { fuzzySearchMedia, intelligentSearch, IntelligentSearchResult } from './utils/fuzzySearch';
+import { runIntelligentSearch } from './utils/searchWorkerManager';
 import { Navbar } from './components/Navbar';
 import { FilterBar } from './components/FilterBar';
 import { MediaCard } from './components/MediaCard';
-import { EmbeddedMediaViewer } from './components/EmbeddedMediaViewer';
-import { AddEditLinkModal } from './components/AddEditLinkModal';
-import { AdminDashboard } from './components/AdminDashboard';
-import { RecentlyViewedDrawer } from './components/RecentlyViewedDrawer';
-import { AuthModal } from './components/AuthModal';
 import { MobileDrawer } from './components/MobileDrawer';
 import { BottomNavBar } from './components/BottomNavBar';
 import { HeroBanner } from './components/HeroBanner';
 import { TopTenSlider } from './components/TopTenSlider';
-import { UserProfileModal } from './components/UserProfileModal';
 import { ScrollNavigation } from './components/ScrollNavigation';
 import { useTranslation } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
+
+// Dynamic Code Splitting for heavy dialogs & modals to ensure ultra-fast initial page load
+const EmbeddedMediaViewer = React.lazy(() => import('./components/EmbeddedMediaViewer').then(m => ({ default: m.EmbeddedMediaViewer })));
+const AddEditLinkModal = React.lazy(() => import('./components/AddEditLinkModal').then(m => ({ default: m.AddEditLinkModal })));
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const RecentlyViewedDrawer = React.lazy(() => import('./components/RecentlyViewedDrawer').then(m => ({ default: m.RecentlyViewedDrawer })));
+const AuthModal = React.lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
+const UserProfileModal = React.lazy(() => import('./components/UserProfileModal').then(m => ({ default: m.UserProfileModal })));
 
 export default function App() {
   const { t } = useTranslation();
@@ -461,16 +464,39 @@ export default function App() {
     };
   }, []);
 
-  // Intelligent Google-grade Search Memo (includes ID priority, typo correction, keyboard converter)
-  const searchResult: IntelligentSearchResult = useMemo(() => {
-    if (!filters.query.trim()) {
-      return {
+  // Intelligent Google-grade Search offloaded to Web Worker to keep main thread at 60-120 FPS
+  const [searchResult, setSearchResult] = useState<IntelligentSearchResult>(() => {
+    return {
+      items,
+      matchReasons: {},
+      exactIdMatch: null,
+      totalMatches: items.length,
+    };
+  });
+
+  useEffect(() => {
+    let isCancelled = false;
+    const q = filters.query.trim();
+
+    if (!q) {
+      setSearchResult({
         items,
         matchReasons: {},
+        exactIdMatch: null,
         totalMatches: items.length,
-      };
+      });
+      return;
     }
-    return intelligentSearch(items, filters.query.trim());
+
+    runIntelligentSearch(items, q).then((res) => {
+      if (!isCancelled) {
+        setSearchResult(res);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [items, filters.query]);
 
   // Filtered & Fuzzy Searched Items Memo
@@ -1303,115 +1329,117 @@ export default function App() {
       />
 
       {/* Embedded Media Viewer Modal */}
-      {previewItem && (
-        <EmbeddedMediaViewer
-          item={previewItem}
-          user={user}
-          comments={comments.filter((c) => c.itemId === previewItem.id)}
-          isLiked={userLikedItemIds.has(previewItem.id)}
-          isBookmarked={userBookmarkedItemIds.has(previewItem.id)}
-          onClose={() => setPreviewItem(null)}
-          onLike={handleLikeItem}
-          onToggleBookmark={handleToggleBookmark}
-          onAddComment={handleAddComment}
-          onDeleteComment={isRealAdmin ? handleDeleteComment : undefined}
-          onOpenAuth={() => setIsAuthOpen(true)}
-        />
-      )}
+      <React.Suspense fallback={null}>
+        {previewItem && (
+          <EmbeddedMediaViewer
+            item={previewItem}
+            user={user}
+            comments={comments.filter((c) => c.itemId === previewItem.id)}
+            isLiked={userLikedItemIds.has(previewItem.id)}
+            isBookmarked={userBookmarkedItemIds.has(previewItem.id)}
+            onClose={() => setPreviewItem(null)}
+            onLike={handleLikeItem}
+            onToggleBookmark={handleToggleBookmark}
+            onAddComment={handleAddComment}
+            onDeleteComment={isRealAdmin ? handleDeleteComment : undefined}
+            onOpenAuth={() => setIsAuthOpen(true)}
+          />
+        )}
 
-      {/* Add / Edit Link Modal (Restricted strictly to verified Admin) */}
-      {isAddEditOpen && isRealAdmin && (
-        <AddEditLinkModal
-          initialItem={editingItem}
-          categories={categories}
-          tags={tags}
-          currentUser={user}
-          onSave={handleSaveLink}
-          onClose={() => {
-            setIsAddEditOpen(false);
-            setEditingItem(null);
-          }}
-        />
-      )}
+        {/* Add / Edit Link Modal (Restricted strictly to verified Admin) */}
+        {isAddEditOpen && isRealAdmin && (
+          <AddEditLinkModal
+            initialItem={editingItem}
+            categories={categories}
+            tags={tags}
+            currentUser={user}
+            onSave={handleSaveLink}
+            onClose={() => {
+              setIsAddEditOpen(false);
+              setEditingItem(null);
+            }}
+          />
+        )}
 
-      {/* Admin Command Nexus Dashboard (Restricted strictly to verified Admin) */}
-      {isAdminOpen && isRealAdmin && (
-        <AdminDashboard
-          isOpen={isAdminOpen}
-          onClose={() => setIsAdminOpen(false)}
-          currentUser={user}
-          items={items}
-          categories={categories}
-          tags={tags}
-          comments={comments}
-          config={config}
-          onSaveConfig={handleSaveConfig}
-          onAddNewLink={() => {
-            setEditingItem(null);
-            setIsAddEditOpen(true);
-          }}
-          onEditLink={(it) => {
-            setEditingItem(it);
-            setIsAddEditOpen(true);
-          }}
-          onDeleteLink={handleDeleteItem}
-          onTogglePin={handleTogglePin}
-          onAddCategory={handleAddCategory}
-          onUpdateCategory={handleUpdateCategory}
-          onDeleteCategory={handleDeleteCategory}
-          onAddTag={handleAddTag}
-          onUpdateTag={handleUpdateTag}
-          onDeleteTag={handleDeleteTag}
-          onDeleteComment={handleDeleteComment}
-          onResetSampleData={handleResetSampleData}
-        />
-      )}
+        {/* Admin Command Nexus Dashboard (Restricted strictly to verified Admin) */}
+        {isAdminOpen && isRealAdmin && (
+          <AdminDashboard
+            isOpen={isAdminOpen}
+            onClose={() => setIsAdminOpen(false)}
+            currentUser={user}
+            items={items}
+            categories={categories}
+            tags={tags}
+            comments={comments}
+            config={config}
+            onSaveConfig={handleSaveConfig}
+            onAddNewLink={() => {
+              setEditingItem(null);
+              setIsAddEditOpen(true);
+            }}
+            onEditLink={(it) => {
+              setEditingItem(it);
+              setIsAddEditOpen(true);
+            }}
+            onDeleteLink={handleDeleteItem}
+            onTogglePin={handleTogglePin}
+            onAddCategory={handleAddCategory}
+            onUpdateCategory={handleUpdateCategory}
+            onDeleteCategory={handleDeleteCategory}
+            onAddTag={handleAddTag}
+            onUpdateTag={handleUpdateTag}
+            onDeleteTag={handleDeleteTag}
+            onDeleteComment={handleDeleteComment}
+            onResetSampleData={handleResetSampleData}
+          />
+        )}
 
-      {/* Recently Viewed Links Drawer */}
-      {isRecentOpen && (
-        <RecentlyViewedDrawer
-          isOpen={isRecentOpen}
-          onClose={() => setIsRecentOpen(false)}
-          recentRecords={validRecentRecords}
-          allItems={items}
-          onPreview={handleOpenPreview}
-          onRecordView={handleRecordView}
-          onRemoveItem={handleRemoveRecentItem}
-          onClearHistory={handleClearHistory}
-        />
-      )}
+        {/* Recently Viewed Links Drawer */}
+        {isRecentOpen && (
+          <RecentlyViewedDrawer
+            isOpen={isRecentOpen}
+            onClose={() => setIsRecentOpen(false)}
+            recentRecords={validRecentRecords}
+            allItems={items}
+            onPreview={handleOpenPreview}
+            onRecordView={handleRecordView}
+            onRemoveItem={handleRemoveRecentItem}
+            onClearHistory={handleClearHistory}
+          />
+        )}
 
-      {/* Identity / Authentication Modal */}
-      {isAuthOpen && (
-        <AuthModal
-          isOpen={isAuthOpen}
-          onClose={() => setIsAuthOpen(false)}
-          currentUser={user}
-          onLogin={handleLogin}
-          onLogout={handleLogout}
-        />
-      )}
+        {/* Identity / Authentication Modal */}
+        {isAuthOpen && (
+          <AuthModal
+            isOpen={isAuthOpen}
+            onClose={() => setIsAuthOpen(false)}
+            currentUser={user}
+            onLogin={handleLogin}
+            onLogout={handleLogout}
+          />
+        )}
 
-      {/* User Profile & Activity Modal (Liked, Bookmarked, Comments) */}
-      {isProfileOpen && (
-        <UserProfileModal
-          isOpen={isProfileOpen}
-          onClose={() => setIsProfileOpen(false)}
-          user={user}
-          items={items}
-          comments={comments}
-          userLikedItemIds={userLikedItemIds}
-          userBookmarkedItemIds={userBookmarkedItemIds}
-          onPreviewItem={handleOpenPreview}
-          onUnlike={handleLikeItem}
-          onUnbookmark={handleToggleBookmark}
-          onDeleteComment={handleDeleteComment}
-          onOpenAuth={() => {
-            setIsProfileOpen(false);
-            setIsAuthOpen(true);
-          }}
-        />
-      )}
+        {/* User Profile & Activity Modal (Liked, Bookmarked, Comments) */}
+        {isProfileOpen && (
+          <UserProfileModal
+            isOpen={isProfileOpen}
+            onClose={() => setIsProfileOpen(false)}
+            user={user}
+            items={items}
+            comments={comments}
+            userLikedItemIds={userLikedItemIds}
+            userBookmarkedItemIds={userBookmarkedItemIds}
+            onPreviewItem={handleOpenPreview}
+            onUnlike={handleLikeItem}
+            onUnbookmark={handleToggleBookmark}
+            onDeleteComment={handleDeleteComment}
+            onOpenAuth={() => {
+              setIsProfileOpen(false);
+              setIsAuthOpen(true);
+            }}
+          />
+        )}
+      </React.Suspense>
 
       {/* Floating Scroll Navigation (Scroll to Top / Scroll to Bottom) */}
       <ScrollNavigation />

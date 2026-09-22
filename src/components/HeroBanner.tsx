@@ -17,6 +17,8 @@ import {
   ZoomOut
 } from 'lucide-react';
 import { BannerSlide, SystemConfig } from '../types';
+import { usePageVisibility } from '../utils/pageVisibility';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface HeroBannerProps {
   config: SystemConfig;
@@ -114,16 +116,18 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     setCurrentIndex(idx);
   };
 
-  // Auto-slide timer with cleanup
+  const isVisible = usePageVisibility();
+
+  // Auto-slide timer with cleanup (automatically pauses when user switches tabs)
   useEffect(() => {
-    if (!isAutoSlide || isPaused || isRepositioning) return;
+    if (!isVisible || !isAutoSlide || isPaused || isRepositioning) return;
 
     const timer = setInterval(() => {
       paginate(1);
     }, intervalSeconds * 1000);
 
     return () => clearInterval(timer);
-  }, [isAutoSlide, isPaused, isRepositioning, intervalSeconds, paginate]);
+  }, [isVisible, isAutoSlide, isPaused, isRepositioning, intervalSeconds, paginate]);
 
   // Height preset classes
   const heightClass = React.useMemo(() => {
@@ -277,13 +281,15 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               <>
                 {/* Ambient Blurred Backdrop */}
                 <div 
-                  className="absolute inset-0 bg-cover bg-center filter blur-2xl scale-125 opacity-40 transition-all duration-700"
-                  style={{ backgroundImage: `url(${activeSlide.imageUrl})` }}
+                  className="absolute inset-0 bg-cover bg-center filter blur-2xl scale-125 opacity-40 transition-all duration-700 pointer-events-none"
+                  style={{ backgroundImage: `url(${getOptimizedImageUrl(activeSlide.imageUrl, { width: 300, quality: 50 })})` }}
                 />
                 {/* Sharp Contained Center Image */}
                 <img
-                  src={activeSlide.imageUrl}
+                  src={getOptimizedImageUrl(activeSlide.imageUrl, { width: 1400, quality: 85 })}
                   alt={activeSlide.title || 'Banner'}
+                  decoding="async"
+                  loading="eager"
                   className="w-full h-full object-contain relative z-10 transition-transform duration-300 pointer-events-none"
                   style={{
                     transform: `scale(${isRepositioning ? dragScale : (activeSlide.scale ?? 1)})`,
@@ -294,8 +300,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               </>
             ) : (
               <img
-                src={activeSlide.imageUrl}
+                src={getOptimizedImageUrl(activeSlide.imageUrl, { width: 1400, quality: 85 })}
                 alt={activeSlide.title || 'Banner'}
+                decoding="async"
+                loading="eager"
                 className="w-full h-full object-cover relative z-0 transition-transform duration-150 pointer-events-none"
                 style={{
                   transform: (isRepositioning ? dragScale : (activeSlide.scale ?? 1)) !== 1

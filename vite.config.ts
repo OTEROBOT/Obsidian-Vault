@@ -1,7 +1,19 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import sharp from 'sharp';
 import { defineConfig, Plugin } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
+
+// High-speed in-memory buffer cache for transcoded WebP/AVIF assets (max 150 items)
+const imageBufferCache = new Map<string, { buffer: Buffer; contentType: string }>();
+function setCache(key: string, data: { buffer: Buffer; contentType: string }) {
+  if (imageBufferCache.size > 150) {
+    const oldestKey = imageBufferCache.keys().next().value;
+    if (oldestKey) imageBufferCache.delete(oldestKey);
+  }
+  imageBufferCache.set(key, data);
+}
 
 function openGraphScraperPlugin(): Plugin {
   return {
@@ -153,7 +165,7 @@ function openGraphScraperPlugin(): Plugin {
           }
         }
 
-        // 4. Pixiv Image Proxy endpoint (Bypasses hotlink protection & Referer checks)
+        // 4. Pixiv Image Proxy endpoint with progressive WebP/AVIF transcoding & caching
         if (req.url.startsWith('/api/pixiv-image')) {
           try {
             const reqUrl = new URL(req.url, 'http://localhost:3000');
@@ -173,6 +185,31 @@ function openGraphScraperPlugin(): Plugin {
               return;
             }
 
+            // Desired width & quality
+            const targetWidth = parseInt(reqUrl.searchParams.get('w') || '0', 10);
+            const quality = Math.min(100, Math.max(30, parseInt(reqUrl.searchParams.get('q') || '80', 10)));
+            const acceptHeader = req.headers['accept'] || '';
+            const requestedFmt = reqUrl.searchParams.get('fmt');
+
+            let format: 'avif' | 'webp' | 'jpeg' = 'webp';
+            if (requestedFmt === 'avif' || (!requestedFmt && acceptHeader.includes('image/avif'))) {
+              format = 'avif';
+            } else if (requestedFmt === 'jpeg') {
+              format = 'jpeg';
+            }
+
+            const cacheKey = `pixiv:${imageUrl}:w=${targetWidth}:q=${quality}:f=${format}`;
+            const cached = imageBufferCache.get(cacheKey);
+            if (cached) {
+              res.setHeader('Content-Type', cached.contentType);
+              res.setHeader('Content-Length', cached.buffer.length);
+              res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+              res.setHeader('Vary', 'Accept');
+              res.statusCode = 200;
+              res.end(cached.buffer);
+              return;
+            }
+
             const imgRes = await fetch(imageUrl, {
               headers: {
                 'Referer': 'https://www.pixiv.net/',
@@ -186,19 +223,125 @@ function openGraphScraperPlugin(): Plugin {
               return;
             }
 
-            const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
             const arrayBuffer = await imgRes.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
+            let transformer = sharp(Buffer.from(arrayBuffer));
 
-            res.setHeader('Content-Type', contentType);
-            res.setHeader('Content-Length', buffer.length);
-            res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+            if (targetWidth > 0 && targetWidth < 3000) {
+              transformer = transformer.resize({ width: targetWidth, withoutEnlargement: true });
+            }
+
+            let outputBuffer: Buffer;
+            let finalContentType: string;
+
+            if (format === 'avif') {
+              outputBuffer = await transformer.avif({ quality, effort: 4 }).toBuffer();
+              finalContentType = 'image/avif';
+            } else if (format === 'jpeg') {
+              outputBuffer = await transformer.jpeg({ quality, progressive: true }).toBuffer();
+              finalContentType = 'image/jpeg';
+            } else {
+              outputBuffer = await transformer.webp({ quality, effort: 4 }).toBuffer();
+              finalContentType = 'image/webp';
+            }
+
+            setCache(cacheKey, { buffer: outputBuffer, contentType: finalContentType });
+
+            res.setHeader('Content-Type', finalContentType);
+            res.setHeader('Content-Length', outputBuffer.length);
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            res.setHeader('Vary', 'Accept');
             res.statusCode = 200;
-            res.end(buffer);
+            res.end(outputBuffer);
             return;
           } catch (err: any) {
             res.statusCode = 500;
             res.end('Proxy error: ' + (err?.message || 'unknown'));
+            return;
+          }
+        }
+
+        // 4.1. General Image Optimizer endpoint (WebP/AVIF progressive transcoding for external URLs)
+        if (req.url.startsWith('/api/optimize-image')) {
+          try {
+            const reqUrl = new URL(req.url, 'http://localhost:3000');
+            const targetUrl = reqUrl.searchParams.get('url');
+
+            if (!targetUrl || !targetUrl.startsWith('http')) {
+              res.statusCode = 400;
+              res.end('Invalid url parameter');
+              return;
+            }
+
+            const targetWidth = parseInt(reqUrl.searchParams.get('w') || '0', 10);
+            const quality = Math.min(100, Math.max(30, parseInt(reqUrl.searchParams.get('q') || '80', 10)));
+            const acceptHeader = req.headers['accept'] || '';
+            const requestedFmt = reqUrl.searchParams.get('fmt');
+
+            let format: 'avif' | 'webp' | 'jpeg' = 'webp';
+            if (requestedFmt === 'avif' || (!requestedFmt && acceptHeader.includes('image/avif'))) {
+              format = 'avif';
+            } else if (requestedFmt === 'jpeg') {
+              format = 'jpeg';
+            }
+
+            const cacheKey = `opt:${targetUrl}:w=${targetWidth}:q=${quality}:f=${format}`;
+            const cached = imageBufferCache.get(cacheKey);
+            if (cached) {
+              res.setHeader('Content-Type', cached.contentType);
+              res.setHeader('Content-Length', cached.buffer.length);
+              res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+              res.setHeader('Vary', 'Accept');
+              res.statusCode = 200;
+              res.end(cached.buffer);
+              return;
+            }
+
+            const fetchRes = await fetch(targetUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+              },
+            });
+
+            if (!fetchRes.ok) {
+              res.statusCode = fetchRes.status;
+              res.end('Failed to fetch image upstream');
+              return;
+            }
+
+            const arrayBuffer = await fetchRes.arrayBuffer();
+            let transformer = sharp(Buffer.from(arrayBuffer));
+
+            if (targetWidth > 0 && targetWidth < 3000) {
+              transformer = transformer.resize({ width: targetWidth, withoutEnlargement: true });
+            }
+
+            let outputBuffer: Buffer;
+            let finalContentType: string;
+
+            if (format === 'avif') {
+              outputBuffer = await transformer.avif({ quality, effort: 4 }).toBuffer();
+              finalContentType = 'image/avif';
+            } else if (format === 'jpeg') {
+              outputBuffer = await transformer.jpeg({ quality, progressive: true }).toBuffer();
+              finalContentType = 'image/jpeg';
+            } else {
+              outputBuffer = await transformer.webp({ quality, effort: 4 }).toBuffer();
+              finalContentType = 'image/webp';
+            }
+
+            setCache(cacheKey, { buffer: outputBuffer, contentType: finalContentType });
+
+            res.setHeader('Content-Type', finalContentType);
+            res.setHeader('Content-Length', outputBuffer.length);
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            res.setHeader('Vary', 'Accept');
+            res.statusCode = 200;
+            res.end(outputBuffer);
+            return;
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.end('Optimization error: ' + (err?.message || 'unknown'));
             return;
           }
         }
@@ -497,10 +640,142 @@ function openGraphScraperPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), openGraphScraperPlugin()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      openGraphScraperPlugin(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: [
+          'favicon.ico',
+          'favicon.svg',
+          'favicon-48x48.png',
+          'favicon-96x96.png',
+          'icon-192.png',
+          'icon-512.png',
+          'apple-touch-icon.png',
+        ],
+        manifest: {
+          id: '/',
+          name: 'Obsidian Vault',
+          short_name: 'Obsidian',
+          description: 'Ultra-fast, luxury cyber-dark link and bookmark management vault with embedded media viewer, advanced fuzzy search, and OpenGraph scraper.',
+          theme_color: '#090a0f',
+          background_color: '#090a0f',
+          display: 'standalone',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            {
+              src: '/favicon-48x48.png',
+              sizes: '48x48',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/favicon-96x96.png',
+              sizes: '96x96',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-stylesheets',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-webfonts',
+                expiration: {
+                  maxEntries: 30,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /\/api\/(?:pixiv-image|optimize-image).*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'optimized-images-cache',
+                expiration: {
+                  maxEntries: 200,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+          ],
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
+      }),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+      },
+    },
+    build: {
+      target: 'esnext',
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+              return 'vendor-react';
+            }
+            if (id.includes('node_modules/@supabase/')) {
+              return 'vendor-supabase';
+            }
+            if (id.includes('node_modules/motion/')) {
+              return 'vendor-motion';
+            }
+            if (id.includes('node_modules/lucide-react/')) {
+              return 'vendor-icons';
+            }
+          },
+        },
       },
     },
     server: {

@@ -18,6 +18,7 @@ import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import { ADMIN_EMAIL } from '../utils/supabase';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface MobileDrawerProps {
   isOpen: boolean;
@@ -273,6 +274,11 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                 <span className="text-[10px]">{t.theme.system}</span>
               </button>
             </div>
+          </div>
+
+          {/* PWA App Installation */}
+          <div className="pt-2">
+            <PWAInstallButton className="w-full justify-center py-2.5" />
           </div>
 
         </div>

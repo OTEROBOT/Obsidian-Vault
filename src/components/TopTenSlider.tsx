@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Category, MediaItem } from '../types';
 import { decodeHtmlEntities } from '../utils/text';
+import { OptimizedImage } from './OptimizedImage';
 
 interface TopTenSliderProps {
   items: MediaItem[];
@@ -236,11 +237,13 @@ export const TopTenSlider: React.FC<TopTenSliderProps> = ({
               >
                 {/* Image / Thumbnail Container */}
                 <div className="relative aspect-[16/10] w-full bg-slate-950 overflow-hidden">
-                  <img
+                  <OptimizedImage
                     src={item.thumbnailUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80'}
                     alt={cleanTitle}
-                    loading="lazy"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    fallbackSrc="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80"
+                    containerClassName="w-full h-full"
+                    objectFit="cover"
+                    className="w-full h-full transition-transform duration-500 group-hover:scale-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0e121d] via-black/20 to-transparent pointer-events-none" />
 
