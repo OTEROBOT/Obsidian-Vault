@@ -95,28 +95,28 @@ export const TopTenSlider: React.FC<TopTenSliderProps> = ({
       <div className="absolute top-0 right-1/4 w-96 h-28 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -translate-y-1/2" />
 
       {/* Header bar */}
-      <div className="relative z-10 px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between border-b border-white/10 bg-white/[0.02]">
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center text-slate-950 shadow-[0_0_16px_rgba(244,63,94,0.35)] shrink-0">
-            <Flame className="w-4 h-4 sm:w-5 sm:h-5 fill-slate-950 animate-pulse" />
+      <div className="relative z-10 px-3 sm:px-6 py-2.5 sm:py-4 flex items-center justify-between gap-2 border-b border-white/10 bg-white/[0.02]">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center text-slate-950 shadow-[0_0_16px_rgba(244,63,94,0.35)] shrink-0">
+            <Flame className="w-3.5 h-3.5 sm:w-5 sm:h-5 fill-slate-950 animate-pulse" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold text-slate-100 font-display tracking-wide flex items-center gap-1.5">
-                <span>10 อันดับโพสต์ยอดนิยม</span>
-                <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h2 className="text-xs sm:text-base font-bold text-slate-100 font-display tracking-wide flex items-center gap-1.5 truncate">
+                <span className="truncate">10 อันดับโพสต์ยอดนิยม</span>
+                <span className="text-[10px] sm:text-[11px] font-mono font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 shrink-0">
                   TOP 10
                 </span>
               </h2>
             </div>
-            <p className="text-[11px] sm:text-xs text-slate-400 font-mono">
+            <p className="text-[10px] sm:text-xs text-slate-400 font-mono truncate hidden xs:block">
               จัดอันดับตามจำนวนกดใจ ❤️ สูงสุดในคลัง
             </p>
           </div>
         </div>
 
         {/* Controls: Prev/Next & Minimize/Close Button */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {!isCollapsed && (
             <>
               <button
@@ -181,20 +181,20 @@ export const TopTenSlider: React.FC<TopTenSliderProps> = ({
       {isCollapsed ? (
         <div 
           onClick={onToggleCollapse}
-          className="px-4 sm:px-6 py-2.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.03] transition-colors group"
+          className="px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-white/[0.03] transition-colors group min-w-0"
         >
-          <div className="flex items-center gap-2 text-xs text-slate-300">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-medium">อันดับ #1 ปัจจุบัน:</span>
-            <span className="text-cyan-300 font-semibold truncate max-w-xs sm:max-w-md">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-slate-300 min-w-0 flex-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="font-medium shrink-0">#1:</span>
+            <span className="text-cyan-300 font-semibold truncate min-w-0">
               {decodeHtmlEntities(topTenItems[0]?.title || '')}
             </span>
-            <span className="text-rose-400 font-mono text-[11px] flex items-center gap-0.5">
+            <span className="text-rose-400 font-mono text-[11px] shrink-0">
               ❤️ {topTenItems[0]?.likesCount || 0}
             </span>
           </div>
-          <span className="text-[11px] font-mono text-cyan-400 group-hover:underline flex items-center gap-1">
-            คลิกเพื่อเปิดดู 10 อันดับ <ChevronDown className="w-3 h-3" />
+          <span className="text-[11px] font-mono text-cyan-400 group-hover:underline flex items-center gap-1 shrink-0 whitespace-nowrap">
+            <span className="hidden xs:inline">10 อันดับ</span> <ChevronDown className="w-3 h-3" />
           </span>
         </div>
       ) : (

@@ -100,11 +100,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         
         {/* Brand Logo */}
         <div 
-          className="flex items-center gap-2.5 sm:gap-3 cursor-pointer select-none group shrink-0" 
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group min-w-0" 
           onClick={() => onSearchChange('')}
           title={t.common.appName}
         >
-          <div className="relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-slate-900 to-purple-600/20 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)] group-hover:border-cyan-400/60 transition-all duration-300 overflow-hidden">
+          <div className="relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-slate-900 to-purple-600/20 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)] group-hover:border-cyan-400/60 transition-all duration-300 overflow-hidden shrink-0">
             {logoUrl ? (
               <img
                 src={logoUrl}
@@ -116,17 +116,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               />
             ) : (
               <>
-                <Compass className="w-5 h-5 text-cyan-400 group-hover:rotate-45 transition-transform duration-500" />
+                <Compass className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 group-hover:rotate-45 transition-transform duration-500" />
                 <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
               </>
             )}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-display font-bold text-base sm:text-lg tracking-wider text-slate-100 group-hover:text-cyan-300 transition-colors">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="font-display font-bold text-sm sm:text-lg tracking-wider text-slate-100 group-hover:text-cyan-300 transition-colors truncate max-w-[125px] xs:max-w-[170px] sm:max-w-none">
                 {vaultName || t.common.appName}
               </span>
-              <span className="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hidden xs:inline-block">
+              <span className="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hidden md:inline-block">
                 v2.5
               </span>
             </div>
@@ -171,10 +171,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile Search Button (shows/hides quick input on small screens) */}
           <button
             onClick={() => setIsMobileSearchOpen(!isMobileSearchOpen)}
-            className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10"
+            className="md:hidden p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10"
             aria-label={t.common.search}
           >
-            <Search className="w-5 h-5" />
+            <Search className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
           {/* 🌐 Language Switcher Dropdown */}
@@ -184,13 +184,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setIsLangOpen(!isLangOpen);
                 setIsThemeOpen(false);
               }}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 lg:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all active:scale-95"
+              className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 lg:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all active:scale-95"
               aria-label={t.nav.language}
               title={t.nav.language}
             >
-              <span className="text-base leading-none">{currentLangObj.flag}</span>
+              <span className="text-sm sm:text-base leading-none">{currentLangObj.flag}</span>
               <span className="hidden sm:inline font-mono uppercase font-semibold">{currentLangObj.code}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isLangOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 transition-transform duration-200 ${isLangOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Language Menu */}
@@ -349,7 +349,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* User Profile / Auth Toggle */}
           {user.isLoggedIn ? (
-            <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+            <div className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 border-l border-white/10">
               <button
                 onClick={onOpenProfile || onOpenAuth}
                 className="flex items-center gap-2 text-left group hover:opacity-90 transition-opacity"
@@ -358,7 +358,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <img
                   src={user.avatar}
                   alt={user.name}
-                  className="w-8 h-8 rounded-lg object-cover ring-1 ring-cyan-500/40 group-hover:ring-cyan-400 transition-all"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover ring-1 ring-cyan-500/40 group-hover:ring-cyan-400 transition-all"
                 />
                 <div className="hidden xl:block text-left">
                   <p className="text-xs font-medium text-slate-200 group-hover:text-cyan-300 transition-colors truncate max-w-[100px]">
@@ -375,7 +375,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={onOpenProfile || onOpenAuth}
                 title="โปรไฟล์และประวัติของฉัน"
-                className="p-1.5 text-cyan-400 hover:text-cyan-200 rounded-lg hover:bg-cyan-500/15 border border-cyan-500/25 transition-colors"
+                className="hidden sm:block p-1.5 text-cyan-400 hover:text-cyan-200 rounded-lg hover:bg-cyan-500/15 border border-cyan-500/25 transition-colors"
               >
                 <User className="w-4 h-4" />
               </button>
@@ -383,7 +383,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <button
               onClick={onOpenAuth}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
             >
               <User className="w-4 h-4" />
               <span className="hidden sm:inline">{t.nav.signIn}</span>

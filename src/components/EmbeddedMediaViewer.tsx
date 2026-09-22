@@ -47,7 +47,34 @@ const BLOCKED_IFRAME_DOMAINS = [
   'linkedin.com',
   'pinterest.com',
   'dlsite.com',
-  'bilibili.com'
+  'bilibili.com',
+  'rule34video.com',
+  'rule34.xxx',
+  'kemono.su',
+  'coomer.su',
+  'e-hentai.org',
+  'exhentai.org',
+  'nhentai.net',
+  'danbooru.donmai.us',
+  'gelbooru.com',
+  'sankakucomplex.com',
+  'yande.re',
+  'fanbox.cc',
+  'patreon.com',
+  'booth.pm',
+  'iwara.tv',
+  'hitomi.la',
+  'luscious.net',
+  'spankbang.com',
+  'pornhub.com',
+  'xvideos.com',
+  'xnxx.com',
+  'missav.com',
+  'javdb.com',
+  't.me',
+  'telegram.org',
+  'medium.com',
+  'google.com'
 ];
 
 const isKnownIframeBlocked = (url: string): boolean => {
@@ -499,24 +526,24 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
       >
         
         {/* Top Header Bar */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10 flex items-center justify-between gap-3 bg-[#090a0f]/90">
-          <div className="flex items-center gap-2.5 truncate">
-            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0 select-all shadow-sm">
+        <div className="px-3 sm:px-6 py-2.5 sm:py-4 border-b border-white/10 flex items-center justify-between gap-2 sm:gap-3 bg-[#090a0f]/90">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1 truncate">
+            <span className="text-[11px] sm:text-xs font-mono font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0 select-all shadow-sm">
               #{item.itemNumber || 1}
             </span>
-            <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+            <span className="text-[10px] sm:text-xs font-mono uppercase tracking-widest px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
               {item.mediaType.toUpperCase()}
             </span>
-            <h2 className="text-sm sm:text-base font-bold text-slate-100 truncate" title={decodeHtmlEntities(item.title)}>
+            <h2 className="text-xs sm:text-base font-bold text-slate-100 truncate" title={decodeHtmlEntities(item.title)}>
               {decodeHtmlEntities(item.title)}
             </h2>
           </div>
 
           {/* Top Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <button
               onClick={handleCopyLink}
-              className="p-2 rounded-xl text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors touch-target"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors touch-target"
               title={t.card.copyUrl}
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -526,7 +553,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 transition-colors touch-target"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-medium bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 transition-colors touch-target"
               title={t.card.source}
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -535,7 +562,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
 
             <button
               onClick={handleSafeClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/30 transition-colors touch-target"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/30 transition-colors touch-target"
               title={t.common.close}
             >
               <X className="w-5 h-5" />

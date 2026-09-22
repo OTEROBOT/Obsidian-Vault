@@ -1077,7 +1077,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#090a0f] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
       
       {/* Sleek Floating Toast Notification */}
       {toastMessage && (
@@ -1118,7 +1118,7 @@ export default function App() {
       />
 
       {/* Main Container Area - Responsive for Mobile, Tablet, Laptop, Desktop, and Smart TVs */}
-      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20 md:pb-8">
+      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20 md:pb-8 overflow-x-hidden">
         
         {/* Top Hero Banner Slider with Free Mouse Drag Repositioning & Smooth Transitions */}
         {config.showBanner !== false && (

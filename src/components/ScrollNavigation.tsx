@@ -88,7 +88,7 @@ export const ScrollNavigation: React.FC = () => {
 
   return (
     <aside
-      className="fixed bottom-20 right-2 sm:bottom-6 sm:right-3.5 z-30 flex flex-col items-center gap-1 p-1 rounded-xl bg-[#090b10]/90 border border-cyan-500/30 shadow-xl shadow-cyan-950/30 select-none opacity-85 hover:opacity-100 transition-opacity"
+      className="hidden sm:flex fixed sm:bottom-6 sm:right-3.5 z-30 flex-col items-center gap-1 p-1 rounded-xl bg-[#090b10]/90 border border-cyan-500/30 shadow-xl shadow-cyan-950/30 select-none opacity-85 hover:opacity-100 transition-opacity"
       role="region"
       aria-label="Scroll Navigation"
     >
