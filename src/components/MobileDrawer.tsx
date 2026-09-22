@@ -111,14 +111,18 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
-                    onLogout();
+                    if (typeof onLogout === 'function') {
+                      onLogout();
+                    }
                     onClose();
                   }}
-                  className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors touch-target"
-                  title={t.nav.signOut}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all touch-target active:scale-95 shadow-sm"
+                  title={t.nav.signOut || 'ออกจากระบบ'}
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                  <span>{t.nav.signOut || 'ออกจากระบบ'}</span>
                 </button>
               </div>
 
@@ -280,6 +284,25 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
           <div className="pt-2">
             <PWAInstallButton className="w-full justify-center py-2.5" />
           </div>
+
+          {/* Quick Sign Out Action Button */}
+          {user.isLoggedIn && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof onLogout === 'function') {
+                    onLogout();
+                  }
+                  onClose();
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold tracking-wide transition-all touch-target active:scale-95 shadow-sm"
+              >
+                <LogOut className="w-4 h-4 text-rose-400" />
+                <span>{t.nav.signOut || 'ออกจากระบบ'}</span>
+              </button>
+            </div>
+          )}
 
         </div>
 

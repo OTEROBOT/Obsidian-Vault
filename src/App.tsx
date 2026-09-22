@@ -125,6 +125,9 @@ export default function App() {
   // Top 10 Popular Posts collapsed/minimized preference state
   const [isTopTenCollapsed, setIsTopTenCollapsed] = useState(() => loadTopTenCollapsed());
 
+  // Logout state ref to prevent stale session reactivation
+  const isLoggingOutRef = useRef(false);
+
   // Synchronize liked & bookmarked items whenever user identity or login status changes
   useEffect(() => {
     const likes = new Set(loadUserLikes(user));
@@ -274,6 +277,7 @@ export default function App() {
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (isLoggingOutRef.current) return;
         if (session?.user) {
           const profile = mapSupabaseUserToProfile(session.user);
           if (profile) {
@@ -1057,11 +1061,29 @@ export default function App() {
     showToast(`Welcome back, ${newUser.name}`);
   };
 
-  const handleLogout = async () => {
-    await signOutSupabaseAuth();
+  const handleLogout = () => {
+    isLoggingOutRef.current = true;
+
+    // 1. Immediately reset state synchronously in React
     setUser(INITIAL_USER);
     saveUser(INITIAL_USER);
-    showToast('Signed out of Obsidian Vault');
+
+    // 2. Close all open overlays
+    setIsProfileOpen(false);
+    setIsAdminOpen(false);
+    setIsMobileMenuOpen(false);
+    setIsAuthOpen(false);
+
+    // 3. Clear Supabase auth in background
+    signOutSupabaseAuth()
+      .catch((e) => console.warn('Logout background error:', e))
+      .finally(() => {
+        setTimeout(() => {
+          isLoggingOutRef.current = false;
+        }, 1500);
+      });
+
+    showToast(t.nav?.signOut || 'ออกจากระบบเรียบร้อยแล้ว (Signed Out)');
   };
 
   const scrollToTop = () => {
@@ -1446,6 +1468,7 @@ export default function App() {
             onDeleteTag={handleDeleteTag}
             onDeleteComment={handleDeleteComment}
             onResetSampleData={handleResetSampleData}
+            onLogout={handleLogout}
           />
         )}
 
@@ -1484,10 +1507,14 @@ export default function App() {
             comments={comments}
             userLikedItemIds={userLikedItemIds}
             userBookmarkedItemIds={userBookmarkedItemIds}
+            onPreview={handleOpenPreview}
             onPreviewItem={handleOpenPreview}
+            onLike={handleLikeItem}
             onUnlike={handleLikeItem}
+            onToggleBookmark={handleToggleBookmark}
             onUnbookmark={handleToggleBookmark}
             onDeleteComment={handleDeleteComment}
+            onLogout={handleLogout}
             onOpenAuth={() => {
               setIsProfileOpen(false);
               setIsAuthOpen(true);

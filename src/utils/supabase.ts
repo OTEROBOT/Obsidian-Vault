@@ -780,10 +780,40 @@ export async function signInWithMagicLink(email: string): Promise<{ error?: stri
 }
 
 export async function signOutSupabaseAuth(): Promise<void> {
+  // 1. Tell Supabase client to sign out with local scope and a timeout fallback
   try {
-    await supabase.auth.signOut();
+    await Promise.race([
+      supabase.auth.signOut(),
+      new Promise((resolve) => setTimeout(resolve, 1200)),
+    ]);
   } catch (e) {
-    console.warn('Sign out error:', e);
+    console.warn('Supabase sign out error:', e);
+  }
+
+  // 2. Completely remove any Supabase auth keys and tokens from localStorage
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (
+          key &&
+          (key.startsWith('sb-') ||
+            key.includes('supabase.auth') ||
+            key.includes('auth-token') ||
+            key === 'obsidian_vault_user_v1')
+        ) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => {
+        try {
+          window.localStorage.removeItem(k);
+        } catch {}
+      });
+    }
+  } catch (cleanErr) {
+    console.warn('Storage cleanup warning during sign out:', cleanErr);
   }
 }
 

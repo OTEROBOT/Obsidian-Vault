@@ -28,7 +28,8 @@ import {
   Sliders,
   RotateCcw,
   CheckCircle2,
-  Palette
+  Palette,
+  LogOut
 } from 'lucide-react';
 import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
 import { 
@@ -66,6 +67,7 @@ interface AdminDashboardProps {
   onDeleteTag: (tagId: string) => void;
   onDeleteComment: (commentId: string) => void;
   onResetSampleData: () => void;
+  onLogout?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -90,6 +92,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteTag,
   onDeleteComment,
   onResetSampleData,
+  onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'links' | 'taxonomies' | 'visuals' | 'comments' | 'config' | 'schema'>('overview');
   const [copiedSql, setCopiedSql] = useState(false);
@@ -426,12 +429,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onLogout && (
+              <button
+                type="button"
+                onClick={() => {
+                  onLogout();
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
+                title="ออกจากระบบ Admin"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">ออกจากระบบ</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors touch-target"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}

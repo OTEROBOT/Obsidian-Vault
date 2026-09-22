@@ -26,10 +26,15 @@ interface UserProfileModalProps {
   comments: Comment[];
   userLikedItemIds: Set<string>;
   userBookmarkedItemIds: Set<string>;
-  onLike: (itemId: string) => void;
-  onToggleBookmark: (itemId: string) => void;
-  onPreview: (item: MediaItem) => void;
-  onLogout: () => void;
+  onLike?: (itemId: string) => void;
+  onUnlike?: (itemId: string) => void;
+  onToggleBookmark?: (itemId: string) => void;
+  onUnbookmark?: (itemId: string) => void;
+  onPreview?: (item: MediaItem) => void;
+  onPreviewItem?: (item: MediaItem) => void;
+  onDeleteComment?: (commentId: string) => void;
+  onOpenAuth?: () => void;
+  onLogout?: () => void;
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -41,12 +46,32 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   userLikedItemIds,
   userBookmarkedItemIds,
   onLike,
+  onUnlike,
   onToggleBookmark,
+  onUnbookmark,
   onPreview,
+  onPreviewItem,
+  onDeleteComment,
+  onOpenAuth,
   onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<'likes' | 'bookmarks' | 'comments'>('likes');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handlePreviewAction = onPreview || onPreviewItem;
+  const handleLikeAction = onLike || onUnlike;
+  const handleBookmarkAction = onToggleBookmark || onUnbookmark;
+
+  const handleLogoutClick = () => {
+    if (typeof onLogout === 'function') {
+      try {
+        onLogout();
+      } catch (err) {
+        console.warn('Logout execution error:', err);
+      }
+    }
+    onClose();
+  };
 
   // Map items by ID for quick O(1) retrieval
   const itemsMap = useMemo(() => {
@@ -163,19 +188,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                onLogout();
-                onClose();
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all"
-              title="ออกจากระบบ"
+              type="button"
+              onClick={handleLogoutClick}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
+              title="ออกจากระบบ (Sign Out)"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">ออกจากระบบ</span>
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span>ออกจากระบบ</span>
             </button>
             <button
+              type="button"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors touch-target"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
@@ -358,15 +382,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                             <div className="flex items-center gap-1">
                               <button
-                                onClick={() => onLike(item.id)}
+                                type="button"
+                                onClick={() => handleLikeAction?.(item.id)}
                                 className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
                                 title="ยกเลิกการถูกใจ"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
-                                  onPreview(item);
+                                  handlePreviewAction?.(item);
                                   onClose();
                                 }}
                                 className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 transition-all flex items-center gap-1"
@@ -454,15 +480,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                             <div className="flex items-center gap-1">
                               <button
-                                onClick={() => onToggleBookmark(item.id)}
+                                type="button"
+                                onClick={() => handleBookmarkAction?.(item.id)}
                                 className="p-1 rounded-lg text-amber-400 hover:bg-amber-500/20 transition-colors"
                                 title="ลบออกจากบุ๊กมาร์ก"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
-                                  onPreview(item);
+                                  handlePreviewAction?.(item);
                                   onClose();
                                 }}
                                 className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 transition-all flex items-center gap-1"
@@ -575,13 +603,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 sm:px-7 py-3.5 border-t border-white/10 bg-[#090a0f] flex items-center justify-between shrink-0">
-          <p className="text-[11px] font-mono text-slate-400">
-            สถานะบัญชี: <span className="text-emerald-400">เข้าสู่ระบบแล้ว</span>
-          </p>
+        <div className="px-5 sm:px-7 py-3.5 border-t border-white/10 bg-[#090a0f] flex items-center justify-between gap-3 shrink-0">
           <button
+            type="button"
+            onClick={handleLogoutClick}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
+          >
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span>ออกจากระบบ (Sign Out)</span>
+          </button>
+          <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-medium transition-colors"
+            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-medium transition-colors touch-target"
           >
             ปิดหน้าต่าง
           </button>
