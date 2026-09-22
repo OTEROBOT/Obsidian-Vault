@@ -29,62 +29,6 @@ import { decodeHtmlEntities } from '../utils/text';
 import { TwitterEmbed } from './TwitterEmbed';
 import { PixivViewer } from './PixivViewer';
 
-// Domains that strictly prohibit iframe embedding via X-Frame-Options: DENY or CSP frame-ancestors
-const BLOCKED_IFRAME_DOMAINS = [
-  'x.com',
-  'twitter.com',
-  't.co',
-  'instagram.com',
-  'facebook.com',
-  'fb.com',
-  'threads.net',
-  'tiktok.com',
-  'reddit.com',
-  'pixiv.net',
-  'discord.com',
-  'github.com',
-  'linkedin.com',
-  'pinterest.com',
-  'dlsite.com',
-  'bilibili.com',
-  'rule34video.com',
-  'rule34.xxx',
-  'kemono.su',
-  'coomer.su',
-  'e-hentai.org',
-  'exhentai.org',
-  'nhentai.net',
-  'danbooru.donmai.us',
-  'gelbooru.com',
-  'sankakucomplex.com',
-  'yande.re',
-  'fanbox.cc',
-  'patreon.com',
-  'booth.pm',
-  'iwara.tv',
-  'hitomi.la',
-  'luscious.net',
-  'spankbang.com',
-  'pornhub.com',
-  'xvideos.com',
-  'xnxx.com',
-  'missav.com',
-  'javdb.com',
-  't.me',
-  'telegram.org',
-  'medium.com',
-  'google.com'
-];
-
-const isKnownIframeBlocked = (url: string): boolean => {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return BLOCKED_IFRAME_DOMAINS.some((d) => host === d || host.endsWith('.' + d));
-  } catch {
-    return false;
-  }
-};
-
 interface EmbeddedMediaViewerProps {
   item: MediaItem;
   user: UserProfile;
@@ -118,7 +62,6 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   const [guestNickname, setGuestNickname] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [imageZoom, setImageZoom] = useState(1);
-  const [webIframeFailed, setWebIframeFailed] = useState(false);
 
   // Strict DOM refs for Safari hardware decoder and memory cleanup
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -178,7 +121,6 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
 
   // Cleanup on unmount or item ID change
   useEffect(() => {
-    setWebIframeFailed(false);
     setImageZoom(1);
     return () => {
       disposeMedia();
@@ -390,9 +332,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
       );
     }
 
-    const isBlocked = isKnownIframeBlocked(item.url);
-
-    // 6. Web / Article / OpenGraph Reader View
+    // 6. Web / Article / OpenGraph Reader View & Direct Live Iframe
     return (
       <div className="w-full space-y-4">
         {/* Rich OpenGraph Card */}
@@ -439,84 +379,52 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
           </div>
         </div>
 
-        {/* Live Iframe Sandbox Preview or Direct External Link Notice */}
-        {isBlocked ? (
-          <div className="rounded-2xl glass-panel p-6 sm:p-8 border border-white/10 text-center space-y-4">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
-              <ExternalLink className="w-6 h-6 stroke-[2.5]" />
-            </div>
-            <div className="space-y-1.5 max-w-md mx-auto">
-              <h4 className="text-sm sm:text-base font-bold text-slate-100">
-                เว็บไซต์นี้ไม่สามารถแสดงผลผ่าน Iframe ได้
-              </h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                กรุณากดลิงก์ด้านล่างเพื่อเปิดไปยังเว็บไซต์ {item.siteName || getDomainFromUrl(item.url)} โดยตรง
-              </p>
-            </div>
-            <div className="flex items-center justify-center pt-1">
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all touch-target shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
-              >
-                <ExternalLink className="w-4 h-4 stroke-[2.5]" />
-                <span>กดเพื่อไปยังเว็บไซต์ {item.siteName || getDomainFromUrl(item.url)}</span>
-              </a>
-            </div>
+        {/* Live Iframe Sandbox Preview */}
+        <div className="rounded-2xl glass-panel overflow-hidden border border-white/10 shadow-2xl">
+          <div className="px-4 py-2.5 bg-black/60 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <span className="font-mono text-[11px] truncate max-w-sm">Iframe: {item.url}</span>
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 hover:underline touch-target font-medium"
+            >
+              <span>{t.viewer.openExternal || 'เปิดหน้าต่างใหม่'}</span>
+              <ExternalLink className="w-3 h-3 stroke-[2.5]" />
+            </a>
           </div>
-        ) : (
-          <div className="rounded-2xl glass-panel overflow-hidden border border-white/10">
-            <div className="px-4 py-2.5 bg-black/60 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-              <span className="font-mono text-[11px] truncate max-w-sm">Iframe: {item.url}</span>
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 hover:underline touch-target"
-              >
-                <span>{t.viewer.openExternal || 'เปิดหน้าต่างใหม่'}</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            {!webIframeFailed ? (
-              <div 
-                className="relative h-[380px] sm:h-[420px] w-full bg-[#090a0f]"
-                style={{ backgroundColor: '#090a0f', colorScheme: 'dark' }}
-              >
-                <iframe
-                  ref={webIframeRef}
-                  src={item.url}
-                  title={item.title}
-                  sandbox="allow-scripts allow-popups allow-forms allow-presentation allow-same-origin"
-                  onError={() => setWebIframeFailed(true)}
-                  className="w-full h-full border-0"
-                  style={{ backgroundColor: '#090a0f' }}
-                />
-              </div>
-            ) : (
-              <div className="p-8 text-center text-slate-400 space-y-3">
-                <p className="text-sm font-semibold text-slate-200">
-                  เว็บไซต์นี้ไม่อนุญาตให้แสดงผลผ่าน Iframe
-                </p>
-                <p className="text-xs text-slate-400">
-                  กรุณากดลิงก์ด้านล่างเพื่อเปิดไปยังเว็บไซต์โดยตรง
-                </p>
-                <div className="pt-2">
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all touch-target shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span>กดเพื่อไปยังเว็บไซต์ {item.siteName || getDomainFromUrl(item.url)}</span>
-                  </a>
-                </div>
-              </div>
-            )}
+
+          <div 
+            className="relative h-[480px] sm:h-[560px] md:h-[620px] w-full bg-[#090a0f]"
+            style={{ backgroundColor: '#090a0f', colorScheme: 'dark' }}
+          >
+            <iframe
+              ref={webIframeRef}
+              src={item.url}
+              title={item.title}
+              sandbox="allow-scripts allow-popups allow-forms allow-presentation allow-same-origin allow-downloads"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              className="w-full h-full border-0"
+              style={{ backgroundColor: '#090a0f' }}
+            />
           </div>
-        )}
+
+          {/* Direct fallback bar beneath the iframe */}
+          <div className="px-4 py-3 bg-black/40 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+            <span className="text-[11px] sm:text-xs text-slate-400">
+              หากหน้าเว็บไม่แสดงผลเนื่องจากนโยบายความปลอดภัยของเว็บไซต์
+            </span>
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all touch-target shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
+            >
+              <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>เปิดลิงก์ไปยัง {item.siteName || getDomainFromUrl(item.url)} โดยตรง</span>
+            </a>
+          </div>
+        </div>
       </div>
     );
   };
