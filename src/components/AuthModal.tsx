@@ -16,10 +16,8 @@ import { UserProfile } from '../types';
 import { 
   signInWithGoogleOAuth, 
   signInWithMagicLink, 
-  ADMIN_EMAIL, 
   supabase, 
-  mapSupabaseUserToProfile,
-  createAdminProfile 
+  mapSupabaseUserToProfile 
 } from '../utils/supabase';
 import { useTranslation } from '../context/LanguageContext';
 
@@ -246,36 +244,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               className="text-xs text-rose-400 hover:text-rose-300 font-medium px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 touch-target"
             >
               {t.nav.signOut}
-            </button>
-          </div>
-        )}
-
-        {/* Quick Admin Access Button (Instant 1-Click Access for oterobot@gmail.com) */}
-        {(!currentUser.isLoggedIn || currentUser.role !== 'admin') && (
-          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-cyan-500/10 to-amber-500/15 border border-amber-500/40 shadow-lg space-y-2.5 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
-                <Shield className="w-4 h-4 text-amber-400" />
-                <span>เข้าสู่ระบบด่วนในฐานะ Admin</span>
-              </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/30">
-                ADMIN_ACCESS
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              สำหรับผู้ดูแลระบบ (<strong className="text-amber-300 font-mono">{ADMIN_EMAIL}</strong>) สามารถเข้าสู่ระบบเพื่อจัดการลิงก์ แบนเนอร์ และฐานข้อมูลได้ทันที 100% โดยไม่ต้องรอการยืนยันอีเมล
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                const adminProfile = createAdminProfile();
-                onLogin(adminProfile);
-                onClose();
-              }}
-              className="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 transition-all shadow-md shadow-amber-500/20 active:scale-[0.99] flex items-center justify-center gap-2 touch-target"
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>เข้าสู่ระบบเป็น Admin ({ADMIN_EMAIL}) ทันที</span>
             </button>
           </div>
         )}

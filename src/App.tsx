@@ -94,6 +94,7 @@ import { TopTenSlider } from './components/TopTenSlider';
 import { ScrollNavigation } from './components/ScrollNavigation';
 import { useTranslation } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
+import { updateBrowserFavicon } from './utils/favicon';
 
 // Dynamic Code Splitting for heavy dialogs & modals to ensure ultra-fast initial page load
 const EmbeddedMediaViewer = React.lazy(() => import('./components/EmbeddedMediaViewer').then(m => ({ default: m.EmbeddedMediaViewer })));
@@ -379,18 +380,10 @@ export default function App() {
     };
   }, [t]);
 
-  // Dynamically update browser tab favicon and title from config
+  // Dynamically update browser tab favicon, apple-touch-icon, and title from config (with Safari cache-busting)
   useEffect(() => {
     const iconUrl = config.faviconUrl || config.logoUrl;
-    if (iconUrl) {
-      let link = document.getElementById('app-favicon') as HTMLLinkElement;
-      if (!link) {
-        link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-      }
-      if (link) {
-        link.href = iconUrl;
-      }
-    }
+    updateBrowserFavicon(iconUrl);
     if (config.vaultName) {
       document.title = config.vaultName;
     }

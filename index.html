@@ -109,13 +109,13 @@
     <meta name="theme-color" content="#090a0f" />
 
     <!-- Googlebot-compliant Favicons (Root HTTP files, 48px multiple & SVG) -->
-    <link rel="icon" id="app-favicon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
-    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" id="app-favicon" href="/favicon.ico?v=2.6" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.6" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=2.6" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png?v=2.6" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=2.6" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2.6" />
+    <link rel="manifest" href="/site.webmanifest?v=2.6" />
 
     <!-- Schema.org Structured Data for Google Site Names & App Entity -->
     <script type="application/ld+json">
@@ -172,6 +172,24 @@
           var savedLang = localStorage.getItem('obsidian_vault_lang');
           if (savedLang) {
             document.documentElement.setAttribute('lang', savedLang);
+          }
+
+          // Early favicon hydration for Safari & modern browsers
+          var savedCfg = localStorage.getItem('obsidian_vault_config_v1');
+          if (savedCfg) {
+            var cfg = JSON.parse(savedCfg);
+            var customIcon = cfg.faviconUrl || cfg.logoUrl;
+            if (customIcon && customIcon.trim()) {
+              var cleanIcon = customIcon.trim();
+              var buster = cleanIcon.indexOf('?') !== -1 ? cleanIcon + '&v=2.6' : cleanIcon + '?v=2.6';
+              var allIconLinks = document.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']");
+              for (var i = 0; i < allIconLinks.length; i++) {
+                allIconLinks[i].href = buster;
+                if (allIconLinks[i].getAttribute('type') === 'image/svg+xml' && !cleanIcon.endsWith('.svg') && cleanIcon.indexOf('data:image/svg+xml') === -1) {
+                  allIconLinks[i].removeAttribute('type');
+                }
+              }
+            }
           }
         } catch (e) {}
       })();
