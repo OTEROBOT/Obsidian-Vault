@@ -66,6 +66,53 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const isRealAdmin = user.isLoggedIn && user.role === 'admin' && user.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
 
+  // Smart Auto-Hiding Navbar: Hide on scroll down, show immediately on scroll up
+  const [isVisible, setIsVisible] = useState(true);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const lastScrollYRef = useRef(0);
+  const tickingRef = useRef(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (tickingRef.current) return;
+      tickingRef.current = true;
+
+      requestAnimationFrame(() => {
+        const currentScrollY = window.scrollY || document.documentElement.scrollTop;
+        const diff = currentScrollY - lastScrollYRef.current;
+
+        // Top of page: always visible
+        if (currentScrollY <= 30) {
+          setIsVisible(true);
+          setIsScrolled(false);
+        } else {
+          setIsScrolled(true);
+
+          // Handle boundary checks for Safari rubber-banding
+          const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+          if (currentScrollY > 0 && currentScrollY < maxScroll) {
+            // Scrolling down by more than 10px -> hide navbar
+            if (diff > 10 && currentScrollY > 70) {
+              if (!isLangOpen && !isThemeOpen && !isMobileSearchOpen) {
+                setIsVisible(false);
+              }
+            } 
+            // Scrolling up even slightly (diff < -5px) -> immediately reveal navbar
+            else if (diff < -5) {
+              setIsVisible(true);
+            }
+          }
+        }
+
+        lastScrollYRef.current = currentScrollY;
+        tickingRef.current = false;
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isLangOpen, isThemeOpen, isMobileSearchOpen]);
+
   // Keyboard shortcut Ctrl+K or Cmd+K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -96,7 +143,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   const currentLangObj = languages.find((l) => l.code === language) || languages[0];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#090a0f]/85 dark:bg-[#090a0f]/85 backdrop-blur-xl transition-colors duration-200">
+    <>
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 w-full border-b transition-all duration-300 ease-out will-change-transform ${
+          isVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+        } ${
+          isScrolled
+            ? 'bg-[#090a0f]/95 dark:bg-[#090a0f]/95 border-white/15 backdrop-blur-2xl shadow-xl shadow-black/50'
+            : 'bg-[#090a0f]/85 dark:bg-[#090a0f]/85 border-white/10 backdrop-blur-xl'
+        }`}
+      >
       <div className="max-w-7xl 2xl:max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-2 sm:gap-4">
         
         {/* Brand Logo */}
@@ -404,14 +460,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Mobile Drawer Hamburger (on smartphones/tablets) */}
+          {/* Mobile & Tablet Drawer Hamburger (visible on smartphones & iPad) */}
           {onOpenMobileMenu && (
             <button
               onClick={onOpenMobileMenu}
-              className="sm:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all touch-target"
+              className="xl:hidden p-2 sm:px-2.5 sm:py-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all active:scale-95 touch-target flex items-center gap-1.5"
               aria-label={t.nav.menu}
+              title={t.nav.menu}
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5 text-cyan-400" />
+              <span className="hidden sm:inline text-xs font-semibold text-slate-200">เมนู</span>
             </button>
           )}
 
@@ -443,5 +501,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
     </header>
+
+    {/* Spacer to preserve natural document flow below the fixed navbar */}
+    <div className="h-16 sm:h-18 w-full shrink-0 pointer-events-none" aria-hidden="true" />
+    </>
   );
 };

@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, Menu } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
 
-export const ScrollNavigation: React.FC = () => {
+interface ScrollNavigationProps {
+  onOpenMobileMenu?: () => void;
+}
+
+export const ScrollNavigation: React.FC<ScrollNavigationProps> = ({ onOpenMobileMenu }) => {
   const { language } = useTranslation();
   const [showNav, setShowNav] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -88,7 +92,7 @@ export const ScrollNavigation: React.FC = () => {
 
   return (
     <aside
-      className="hidden sm:flex fixed sm:bottom-6 sm:right-3.5 z-30 flex-col items-center gap-1 p-1 rounded-xl bg-[#090b10]/90 border border-cyan-500/30 shadow-xl shadow-cyan-950/30 select-none opacity-85 hover:opacity-100 transition-opacity"
+      className="hidden sm:flex fixed sm:bottom-20 lg:bottom-6 sm:right-3.5 z-30 flex-col items-center gap-1 p-1 rounded-xl bg-[#090b10]/90 border border-cyan-500/30 shadow-xl shadow-cyan-950/30 select-none opacity-85 hover:opacity-100 transition-all"
       role="region"
       aria-label="Scroll Navigation"
     >
@@ -129,6 +133,19 @@ export const ScrollNavigation: React.FC = () => {
       >
         <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
       </button>
+
+      {/* Quick Menu Button (iPad / Tablet / Small Desktop) */}
+      {onOpenMobileMenu && (
+        <button
+          type="button"
+          onClick={onOpenMobileMenu}
+          title={language === 'th' ? 'เปิดเมนู' : 'Open menu'}
+          aria-label={language === 'th' ? 'เปิดเมนู' : 'Open menu'}
+          className="xl:hidden w-8 h-8 mt-0.5 rounded-lg flex items-center justify-center text-cyan-300 hover:text-white bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 hover:border-cyan-300 active:scale-95 transition-all duration-150 cursor-pointer"
+        >
+          <Menu className="w-4 h-4" />
+        </button>
+      )}
     </aside>
   );
 };

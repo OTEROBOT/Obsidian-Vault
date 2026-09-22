@@ -41,10 +41,10 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
   return (
     <nav 
-      aria-label="Mobile Bottom Navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090a0f]/90 dark:bg-[#090a0f]/90 border-t border-white/10 backdrop-blur-2xl safe-bottom"
+      aria-label="Mobile & Tablet Bottom Navigation"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090a0f]/95 dark:bg-[#090a0f]/95 border-t border-white/10 backdrop-blur-2xl safe-bottom shadow-2xl shadow-black/80"
     >
-      <div className="grid grid-cols-5 h-14 max-w-md mx-auto items-center px-1">
+      <div className="grid grid-cols-5 h-14 max-w-md sm:max-w-lg mx-auto items-center px-1 sm:px-4">
         
         {/* Home / Top */}
         <button

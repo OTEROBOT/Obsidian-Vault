@@ -1133,7 +1133,7 @@ export default function App() {
       />
 
       {/* Main Container Area - Responsive for Mobile, Tablet, Laptop, Desktop, and Smart TVs */}
-      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20 md:pb-8 overflow-x-hidden">
+      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-24 lg:pb-8 overflow-x-hidden">
         
         {/* Top Hero Banner Slider with Free Mouse Drag Repositioning & Smooth Transitions */}
         {config.showBanner !== false && (
@@ -1516,8 +1516,8 @@ export default function App() {
         )}
       </React.Suspense>
 
-      {/* Floating Scroll Navigation (Scroll to Top / Scroll to Bottom) */}
-      <ScrollNavigation />
+      {/* Floating Scroll Navigation (Scroll to Top / Scroll to Bottom / Menu) */}
+      <ScrollNavigation onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
 
     </div>
   );
