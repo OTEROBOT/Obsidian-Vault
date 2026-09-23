@@ -19,9 +19,10 @@ export function usePWAInstall() {
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsInstalled(isStandalone);
 
-    // Detect iOS devices
+    // Detect iOS devices (including iPadOS where userAgent can report as MacIntel with touch points)
     const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
+    const isIPadOS = window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1;
+    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent) || isIPadOS;
     setIsIOS(isIOSDevice);
 
     const handleBeforeInstallPrompt = (e: Event) => {

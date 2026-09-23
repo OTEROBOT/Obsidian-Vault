@@ -1,3 +1,6 @@
+import React, { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+
 // Guard against read-only getter TypeError on window.fetch in sandboxed iframe environments
 if (typeof window !== 'undefined') {
   try {
@@ -67,8 +70,6 @@ if (typeof window !== 'undefined') {
   }, true);
 }
 
-import {StrictMode} from 'react';
-import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ThemeProvider } from './context/ThemeContext';

@@ -296,6 +296,7 @@ export default function App() {
   const [isRecentOpen, setIsRecentOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [returnToProfile, setReturnToProfile] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Floating Toast Notification
@@ -726,11 +727,29 @@ export default function App() {
     return result;
   }, [items, filters, searchResult]);
 
-  // Virtualized progressive windowing for 60-120 FPS rendering on Safari & iPad
-  const [visibleCount, setVisibleCount] = useState(18);
+  // Virtualized progressive windowing with persistence for smooth return
+  const [visibleCount, setVisibleCount] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vault_main_visible_count');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 18) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return 18;
+  });
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Reset pagination window when filters change
+  // Sync visibleCount to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('vault_main_visible_count', String(visibleCount));
+    } catch (e) {}
+  }, [visibleCount]);
+
+  // Reset pagination window only when user changes search or category filter
   useEffect(() => {
     setVisibleCount(18);
   }, [filters]);
@@ -756,6 +775,62 @@ export default function App() {
   const renderedItems = useMemo(() => {
     return filteredItems.slice(0, visibleCount);
   }, [filteredItems, visibleCount]);
+
+  // Track and remember main page scroll position across tab switches, closes, and reloads
+  useEffect(() => {
+    let timeoutId: any = null;
+    const handleScroll = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        try {
+          const y = window.scrollY || document.documentElement.scrollTop;
+          sessionStorage.setItem('vault_main_scroll_y', String(y));
+          localStorage.setItem('vault_main_scroll_y', String(y));
+        } catch (e) {}
+      }, 80);
+    };
+
+    const handleSaveScroll = () => {
+      try {
+        const y = window.scrollY || document.documentElement.scrollTop;
+        sessionStorage.setItem('vault_main_scroll_y', String(y));
+        localStorage.setItem('vault_main_scroll_y', String(y));
+      } catch (e) {}
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('pagehide', handleSaveScroll);
+    window.addEventListener('beforeunload', handleSaveScroll);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('pagehide', handleSaveScroll);
+      window.removeEventListener('beforeunload', handleSaveScroll);
+    };
+  }, []);
+
+  // Restore main page scroll position once items have rendered
+  const hasRestoredMainScrollRef = useRef(false);
+  useEffect(() => {
+    if (hasRestoredMainScrollRef.current || renderedItems.length === 0) return;
+
+    const savedYStr = sessionStorage.getItem('vault_main_scroll_y') || localStorage.getItem('vault_main_scroll_y');
+    if (savedYStr) {
+      const savedY = parseInt(savedYStr, 10);
+      if (!isNaN(savedY) && savedY > 0) {
+        hasRestoredMainScrollRef.current = true;
+        if ('scrollRestoration' in window.history) {
+          window.history.scrollRestoration = 'manual';
+        }
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: savedY, behavior: 'instant' });
+          });
+        });
+      }
+    }
+  }, [renderedItems.length]);
 
   // Category counts memo
   const categoryCounts = useMemo(() => {
@@ -1553,7 +1628,13 @@ export default function App() {
             comments={comments.filter((c) => c.itemId === previewItem.id)}
             isLiked={userLikedItemIds.has(previewItem.id)}
             isBookmarked={userBookmarkedItemIds.has(previewItem.id)}
-            onClose={() => setPreviewItem(null)}
+            onClose={() => {
+              setPreviewItem(null);
+              if (returnToProfile) {
+                setReturnToProfile(false);
+                setIsProfileOpen(true);
+              }
+            }}
             onLike={handleLikeItem}
             onToggleBookmark={handleToggleBookmark}
             onAddComment={handleAddComment}
@@ -1640,14 +1721,23 @@ export default function App() {
         {isProfileOpen && (
           <UserProfileModal
             isOpen={isProfileOpen}
-            onClose={() => setIsProfileOpen(false)}
+            onClose={() => {
+              setIsProfileOpen(false);
+              setReturnToProfile(false);
+            }}
             user={user}
             items={items}
             comments={comments}
             userLikedItemIds={userLikedItemIds}
             userBookmarkedItemIds={userBookmarkedItemIds}
-            onPreview={handleOpenPreview}
-            onPreviewItem={handleOpenPreview}
+            onPreview={(item) => {
+              setReturnToProfile(true);
+              handleOpenPreview(item);
+            }}
+            onPreviewItem={(item) => {
+              setReturnToProfile(true);
+              handleOpenPreview(item);
+            }}
             onLike={handleLikeItem}
             onUnlike={handleLikeItem}
             onToggleBookmark={handleToggleBookmark}

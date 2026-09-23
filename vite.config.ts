@@ -755,6 +755,10 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+      dedupe: ['react', 'react-dom'],
+    },
+    optimizeDeps: {
+      include: ['react', 'react-dom', 'react-dom/client'],
     },
     build: {
       target: 'esnext',
@@ -762,13 +766,10 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
-              return 'vendor-react';
-            }
             if (id.includes('node_modules/@supabase/')) {
               return 'vendor-supabase';
             }
-            if (id.includes('node_modules/motion/')) {
+            if (id.includes('node_modules/motion/') || id.includes('node_modules/framer-motion/')) {
               return 'vendor-motion';
             }
             if (id.includes('node_modules/lucide-react/')) {

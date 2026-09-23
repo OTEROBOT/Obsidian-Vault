@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   X, 
   User, 
@@ -55,12 +55,71 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onOpenAuth,
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState<'likes' | 'bookmarks' | 'comments'>('likes');
+  const [activeTab, setActiveTab] = useState<'likes' | 'bookmarks' | 'comments'>(() => {
+    try {
+      const saved = localStorage.getItem('vault_profile_active_tab');
+      if (saved === 'likes' || saved === 'bookmarks' || saved === 'comments') {
+        return saved;
+      }
+    } catch (e) {}
+    return 'likes';
+  });
   const [searchQuery, setSearchQuery] = useState('');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const handlePreviewAction = onPreview || onPreviewItem;
   const handleLikeAction = onLike || onUnlike;
   const handleBookmarkAction = onToggleBookmark || onUnbookmark;
+
+  // Tab change with scroll saving
+  const handleTabChange = (tab: 'likes' | 'bookmarks' | 'comments') => {
+    if (scrollContainerRef.current) {
+      const currentScroll = scrollContainerRef.current.scrollTop;
+      try {
+        sessionStorage.setItem(`vault_profile_scroll_${activeTab}`, String(currentScroll));
+        localStorage.setItem(`vault_profile_scroll_${activeTab}`, String(currentScroll));
+      } catch (e) {}
+    }
+    setActiveTab(tab);
+    try {
+      localStorage.setItem('vault_profile_active_tab', tab);
+    } catch (e) {}
+  };
+
+  // Restore scroll position whenever modal opens or activeTab changes
+  useEffect(() => {
+    if (!isOpen) return;
+    const key = `vault_profile_scroll_${activeTab}`;
+    const savedStr = sessionStorage.getItem(key) || localStorage.getItem(key);
+    const saved = parseInt(savedStr || '0', 10);
+    if (saved > 0) {
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = saved;
+        }
+      });
+    }
+  }, [isOpen, activeTab]);
+
+  const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.scrollTop;
+    try {
+      sessionStorage.setItem(`vault_profile_scroll_${activeTab}`, String(top));
+      localStorage.setItem(`vault_profile_scroll_${activeTab}`, String(top));
+    } catch (e) {}
+  };
+
+  // Open preview while preserving modal and scroll position
+  const handleOpenCard = (item: MediaItem) => {
+    if (scrollContainerRef.current) {
+      const top = scrollContainerRef.current.scrollTop;
+      try {
+        sessionStorage.setItem(`vault_profile_scroll_${activeTab}`, String(top));
+        localStorage.setItem(`vault_profile_scroll_${activeTab}`, String(top));
+      } catch (e) {}
+    }
+    handlePreviewAction?.(item);
+  };
 
   const handleLogoutClick = () => {
     if (typeof onLogout === 'function') {
@@ -210,7 +269,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         {/* Quick Stats Banner */}
         <div className="grid grid-cols-3 border-b border-white/10 bg-white/[0.02] shrink-0 divide-x divide-white/10">
           <button
-            onClick={() => setActiveTab('likes')}
+            onClick={() => handleTabChange('likes')}
             className={`py-3 px-3 text-center transition-colors ${
               activeTab === 'likes' ? 'bg-rose-500/10' : 'hover:bg-white/[0.04]'
             }`}
@@ -223,7 +282,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('bookmarks')}
+            onClick={() => handleTabChange('bookmarks')}
             className={`py-3 px-3 text-center transition-colors ${
               activeTab === 'bookmarks' ? 'bg-amber-500/10' : 'hover:bg-white/[0.04]'
             }`}
@@ -236,7 +295,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('comments')}
+            onClick={() => handleTabChange('comments')}
             className={`py-3 px-3 text-center transition-colors ${
               activeTab === 'comments' ? 'bg-cyan-500/10' : 'hover:bg-white/[0.04]'
             }`}
@@ -253,7 +312,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         <div className="px-5 sm:px-7 py-3 border-b border-white/10 bg-[#0e121d] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto no-scrollbar">
             <button
-              onClick={() => setActiveTab('likes')}
+              onClick={() => handleTabChange('likes')}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 activeTab === 'likes'
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
@@ -265,7 +324,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </button>
 
             <button
-              onClick={() => setActiveTab('bookmarks')}
+              onClick={() => handleTabChange('bookmarks')}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 activeTab === 'bookmarks'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
@@ -277,7 +336,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </button>
 
             <button
-              onClick={() => setActiveTab('comments')}
+              onClick={() => handleTabChange('comments')}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 activeTab === 'comments'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
@@ -311,7 +370,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Tab Content List Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+        <div ref={scrollContainerRef} onScroll={handleContainerScroll} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
           
           {/* TAB 1: LIKED ITEMS */}
           {activeTab === 'likes' && (
@@ -341,10 +400,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       >
                         {/* Thumbnail */}
                         <div 
-                          onClick={() => {
-                            onPreview(item);
-                            onClose();
-                          }}
+                          onClick={() => handleOpenCard(item)}
                           className="relative w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-slate-950 cursor-pointer"
                         >
                           <img
@@ -361,10 +417,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         <div className="flex-1 min-w-0 flex flex-col justify-between">
                           <div>
                             <h4 
-                              onClick={() => {
-                                onPreview(item);
-                                onClose();
-                              }}
+                              onClick={() => handleOpenCard(item)}
                               className="text-xs font-semibold text-slate-200 hover:text-cyan-300 transition-colors line-clamp-2 cursor-pointer leading-snug"
                             >
                               {cleanTitle}
@@ -391,11 +444,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  handlePreviewAction?.(item);
-                                  onClose();
-                                }}
-                                className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 transition-all flex items-center gap-1"
+                                onClick={() => handleOpenCard(item)}
+                                className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 transition-all flex items-center gap-1 cursor-pointer"
                               >
                                 <span>ดู</span>
                                 <Maximize2 className="w-2.5 h-2.5" />
@@ -439,10 +489,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       >
                         {/* Thumbnail */}
                         <div 
-                          onClick={() => {
-                            onPreview(item);
-                            onClose();
-                          }}
+                          onClick={() => handleOpenCard(item)}
                           className="relative w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-slate-950 cursor-pointer"
                         >
                           <img
@@ -459,10 +506,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         <div className="flex-1 min-w-0 flex flex-col justify-between">
                           <div>
                             <h4 
-                              onClick={() => {
-                                onPreview(item);
-                                onClose();
-                              }}
+                              onClick={() => handleOpenCard(item)}
                               className="text-xs font-semibold text-slate-200 hover:text-cyan-300 transition-colors line-clamp-2 cursor-pointer leading-snug"
                             >
                               {cleanTitle}
@@ -489,11 +533,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  handlePreviewAction?.(item);
-                                  onClose();
-                                }}
-                                className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 transition-all flex items-center gap-1"
+                                onClick={() => handleOpenCard(item)}
+                                className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 transition-all flex items-center gap-1 cursor-pointer"
                               >
                                 <span>เปิด</span>
                                 <Maximize2 className="w-2.5 h-2.5" />
@@ -544,8 +585,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                           <span 
                             onClick={() => {
                               if (parentItem) {
-                                onPreview(parentItem);
-                                onClose();
+                                handleOpenCard(parentItem);
                               }
                             }}
                             className="text-xs font-medium text-slate-300 hover:text-cyan-300 cursor-pointer truncate"
@@ -557,11 +597,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                         {parentItem && (
                           <button
-                            onClick={() => {
-                              onPreview(parentItem);
-                              onClose();
-                            }}
-                            className="shrink-0 text-[10px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
+                            onClick={() => handleOpenCard(parentItem)}
+                            className="shrink-0 text-[10px] font-mono text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             เปิดโพสต์ &rarr;
                           </button>
