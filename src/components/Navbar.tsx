@@ -157,9 +157,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         
         {/* Brand Logo */}
         <div 
-          className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group min-w-0" 
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group shrink-0" 
           onClick={() => onSearchChange('')}
-          title={t.common.appName}
+          title={vaultName || t.common.appName}
         >
           <div className="relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-slate-900 to-purple-600/20 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)] group-hover:border-cyan-400/60 transition-all duration-300 overflow-hidden shrink-0">
             {logoUrl ? (
@@ -178,23 +178,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               </>
             )}
           </div>
-          <div className="min-w-0">
+          <div className="shrink-0 flex flex-col justify-center">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="font-display font-bold text-sm sm:text-lg tracking-wider text-slate-100 group-hover:text-cyan-300 transition-colors truncate max-w-[125px] xs:max-w-[170px] sm:max-w-none">
+              <span className="font-display font-bold text-sm sm:text-base lg:text-lg tracking-wider text-slate-100 group-hover:text-cyan-300 transition-colors whitespace-nowrap">
                 {vaultName || t.common.appName}
               </span>
-              <span className="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hidden md:inline-block">
+              <span className="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hidden 2xl:inline-block">
                 v2.5
               </span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block truncate max-w-[200px] lg:max-w-none">
+            <p className="text-[10px] sm:text-[11px] text-slate-400 hidden 2xl:block truncate max-w-[200px]">
               {t.nav.brandTagline}
             </p>
           </div>
         </div>
 
         {/* Global Fast Search Bar (Desktop / Tablet) */}
-        <div className="hidden md:flex flex-1 min-w-[140px] max-w-md lg:max-w-xl 2xl:max-w-2xl mx-2 sm:mx-3 lg:mx-4">
+        <div className="hidden md:flex flex-1 min-w-[160px] max-w-xs lg:max-w-md xl:max-w-lg 2xl:max-w-2xl mx-2 sm:mx-3 lg:mx-4">
           <div className="relative w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -203,7 +203,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={t.nav.searchPlaceholder}
-              className="w-full pl-10 pr-16 lg:pr-20 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm glass-input text-slate-100 placeholder-slate-500 focus:text-white"
+              className="w-full pl-10 pr-14 lg:pr-20 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm glass-input text-slate-100 placeholder-slate-500 focus:text-white"
             />
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searchQuery ? (
@@ -366,12 +366,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenRecent}
             title={t.nav.recent}
-            className="hidden sm:flex relative items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all"
+            className="hidden sm:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all active:scale-95"
           >
             <Clock className="w-4 h-4 text-cyan-400" />
-            <span className="hidden lg:inline">{t.nav.recent}</span>
+            <span className="hidden xl:inline">{t.nav.recent}</span>
             {recentCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 text-[10px] font-mono rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              <span className="px-1.5 py-0.2 text-[10px] font-mono rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                 {recentCount}
               </span>
             )}
@@ -382,10 +382,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenAdmin}
               title={t.nav.admin}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)] active:scale-95"
             >
               <Shield className="w-4 h-4 text-amber-400" />
-              <span className="hidden lg:inline">{t.nav.admin}</span>
+              <span className="hidden xl:inline">{t.nav.admin}</span>
             </button>
           )}
 
@@ -394,19 +394,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenAddLink}
               title={t.nav.addLink}
-              className="hidden sm:flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden lg:inline">{t.nav.addLink}</span>
+              <span className="hidden xl:inline">{t.nav.addLink}</span>
             </button>
           )}
 
           {/* PWA Install Button (Chromium, Android & iOS Safari) */}
-          <PWAInstallButton compact={true} className="hidden sm:flex" />
+          <PWAInstallButton compact={true} className="hidden 2xl:flex" />
 
           {/* User Profile / Auth Toggle */}
           {user.isLoggedIn ? (
-            <div className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 border-l border-white/10">
+            <div className="flex items-center gap-1 sm:gap-2 pl-1.5 sm:pl-2 border-l border-white/10">
               <button
                 onClick={onOpenProfile || onOpenAuth}
                 className="flex items-center gap-2 text-left group hover:opacity-90 transition-opacity"
@@ -417,7 +417,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   alt={user.name}
                   className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover ring-1 ring-cyan-500/40 group-hover:ring-cyan-400 transition-all"
                 />
-                <div className="hidden xl:block text-left">
+                <div className="hidden 2xl:block text-left">
                   <p className="text-xs font-medium text-slate-200 group-hover:text-cyan-300 transition-colors truncate max-w-[100px]">
                     {user.name}
                   </p>
@@ -429,25 +429,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </button>
 
-              <button
-                type="button"
-                onClick={onOpenProfile || onOpenAuth}
-                title="โปรไฟล์และประวัติของฉัน"
-                className="hidden sm:block p-1.5 text-cyan-400 hover:text-cyan-200 rounded-lg hover:bg-cyan-500/15 border border-cyan-500/25 transition-colors"
-              >
-                <User className="w-4 h-4" />
-              </button>
-
               {/* Direct Logout Button in Navbar */}
               <button
                 type="button"
                 onClick={onLogout}
                 title={t.nav.signOut || 'ออกจากระบบ'}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
+                className="flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
                 aria-label={t.nav.signOut || 'ออกจากระบบ'}
               >
                 <LogOut className="w-3.5 h-3.5 text-rose-400" />
-                <span className="hidden md:inline">{t.nav.signOut || 'ออกจากระบบ'}</span>
+                <span className="hidden xl:inline">{t.nav.signOut || 'ออกจากระบบ'}</span>
               </button>
             </div>
           ) : (
@@ -464,12 +455,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenMobileMenu && (
             <button
               onClick={onOpenMobileMenu}
-              className="xl:hidden p-2 sm:px-2.5 sm:py-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all active:scale-95 touch-target flex items-center gap-1.5"
+              className="xl:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition-all active:scale-95 touch-target flex items-center justify-center"
               aria-label={t.nav.menu}
               title={t.nav.menu}
             >
               <Menu className="w-5 h-5 text-cyan-400" />
-              <span className="hidden sm:inline text-xs font-semibold text-slate-200">เมนู</span>
             </button>
           )}
 
