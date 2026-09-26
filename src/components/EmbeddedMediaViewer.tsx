@@ -66,15 +66,12 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   const [guestNickname, setGuestNickname] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [imageZoom, setImageZoom] = useState(1);
-  const [iframeMode, setIframeMode] = useState<'proxy' | 'direct' | 'snapshot'>('proxy');
-  const [iframeLoading, setIframeLoading] = useState(true);
-  const [iframeKey, setIframeKey] = useState(0);
+  const [showSnapshot, setShowSnapshot] = useState(false);
 
   // Strict DOM refs for Safari hardware decoder and memory cleanup
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
-  const webIframeRef = useRef<HTMLIFrameElement>(null);
 
   const isRealAdmin = user.isLoggedIn && user.role === 'admin' && user.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
 
@@ -110,15 +107,6 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
         // Safe catch
       }
     }
-
-    // 4. Clear Web Iframe
-    if (webIframeRef.current) {
-      try {
-        webIframeRef.current.src = 'about:blank';
-      } catch {
-        // Safe catch
-      }
-    }
   }, []);
 
   const handleSafeClose = useCallback(() => {
@@ -129,9 +117,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   // Cleanup on unmount or item ID change
   useEffect(() => {
     setImageZoom(1);
-    setIframeMode('proxy');
-    setIframeLoading(true);
-    setIframeKey((k) => k + 1);
+    setShowSnapshot(false);
     return () => {
       disposeMedia();
     };
@@ -342,221 +328,111 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
       );
     }
 
-    // 6. Web / Article / OpenGraph Reader View & Direct Live Iframe
+    // 6. Web / Article / External Link Hub & Reader View
+    const domain = getDomainFromUrl(item.url);
+    const liveSnapshotUrl = `https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=1280&h=720`;
+    const displayImg = showSnapshot ? liveSnapshotUrl : (item.thumbnailUrl || liveSnapshotUrl);
+
     return (
       <div className="w-full space-y-4">
-        {/* Rich OpenGraph Card */}
-        <div className="rounded-2xl glass-panel p-4 sm:p-6 border border-emerald-500/20 shadow-xl space-y-4">
-          <div className="flex flex-col md:flex-row gap-5 items-start">
-            {item.thumbnailUrl && (
-              <img
-                src={item.thumbnailUrl}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="w-full md:w-64 aspect-video object-cover rounded-xl border border-white/10 shadow-lg"
-              />
-            )}
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono">
-                <Globe className="w-4 h-4" />
-                <span>{item.siteName || getDomainFromUrl(item.url)}</span>
-              </div>
-              <h3 className="text-lg sm:text-xl font-bold text-slate-100 leading-snug">{decodeHtmlEntities(item.title)}</h3>
-              {item.description && (
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{decodeHtmlEntities(item.description)}</p>
+        {/* Visual Cover / Web Snapshot Display */}
+        <div className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden glass-panel border border-cyan-500/25 shadow-2xl bg-black/70 flex flex-col">
+          {/* Top Info Bar */}
+          <div className="px-4 py-3 bg-[#090a0f]/90 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 truncate">
+              {item.favicon ? (
+                <img src={item.favicon} alt="" className="w-4 h-4 rounded object-contain shrink-0" />
+              ) : (
+                <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
               )}
-              
-              <div className="pt-2 flex flex-wrap items-center gap-2 sm:gap-3">
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all touch-target"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>{t.card.source}</span>
-                </a>
-                <button
-                  onClick={handleCopyLink}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-all touch-target"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? t.card.copied : t.card.copyUrl}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Interactive Web Iframe & Proxy Viewer */}
-        <div className="rounded-2xl glass-panel overflow-hidden border border-white/10 shadow-2xl">
-          {/* Top Control Bar with Mode Switchers */}
-          <div className="px-3 sm:px-4 py-2.5 bg-black/70 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
-            {/* Mode Switcher Tabs */}
-            <div className="flex items-center gap-1 sm:gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
-              <button
-                type="button"
-                onClick={() => {
-                  setIframeMode('proxy');
-                  setIframeLoading(true);
-                  setIframeKey((k) => k + 1);
-                }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-                  iframeMode === 'proxy'
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                }`}
-                title="โหลดหน้าเว็บผ่าน Obsidian Proxy เพื่อบายพาสหน้าขาวและ X-Frame-Options"
-              >
-                <Zap className="w-3 h-3" />
-                <span>โหมด Proxy</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIframeMode('direct');
-                  setIframeLoading(true);
-                  setIframeKey((k) => k + 1);
-                }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-                  iframeMode === 'direct'
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                }`}
-                title="โหลด URL ตรงจากเซิร์ฟเวอร์ต้นฉบับ"
-              >
-                <Globe className="w-3 h-3" />
-                <span>โหมดตรง (Direct)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIframeMode('snapshot')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-                  iframeMode === 'snapshot'
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                }`}
-                title="ดูภาพ Snapshot หน้าเว็บสดความละเอียดสูง"
-              >
-                <Camera className="w-3 h-3" />
-                <span>ภาพ Snapshot</span>
-              </button>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2">
-              {iframeMode !== 'snapshot' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIframeLoading(true);
-                    setIframeKey((k) => k + 1);
-                  }}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-white/10 transition-colors"
-                  title="รีโหลดเฟรม"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${iframeLoading ? 'animate-spin text-cyan-400' : ''}`} />
-                </button>
-              )}
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 hover:underline touch-target font-medium px-2 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20"
-              >
-                <span>{t.viewer.openExternal || 'เปิดหน้าต่างใหม่'}</span>
-                <ExternalLink className="w-3 h-3 stroke-[2.5]" />
-              </a>
-            </div>
-          </div>
-
-          {/* Iframe Viewport Area */}
-          <div 
-            className="relative h-[480px] sm:h-[560px] md:h-[620px] w-full bg-[#090a0f] overflow-hidden"
-            style={{ backgroundColor: '#090a0f', colorScheme: 'dark' }}
-          >
-            {iframeMode === 'snapshot' ? (
-              <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#090a0f] overflow-auto">
-                <img
-                  src={`https://s0.wp.com/mshots/v1/${encodeURIComponent(item.url)}?w=1280&h=720`}
-                  alt={item.title}
-                  className="max-h-full max-w-full rounded-xl object-contain shadow-2xl border border-white/10"
-                  onError={(e) => {
-                    if (item.thumbnailUrl) {
-                      (e.currentTarget as HTMLImageElement).src = item.thumbnailUrl;
-                    }
-                  }}
-                />
-              </div>
-            ) : (
-              <>
-                {/* Cyber Dark Loading Screen */}
-                {iframeLoading && (
-                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#090a0f] p-6 text-center animate-in fade-in duration-150">
-                    <div className="relative w-14 h-14 mb-3.5 flex items-center justify-center">
-                      <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" />
-                      <Zap className="w-6 h-6 text-cyan-400 animate-pulse" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-100 font-mono tracking-wide">
-                      {iframeMode === 'proxy' ? '⚡ OBSIDIAN WEB PROXY CONNECTING...' : '🌐 DIRECT BROWSER CONNECTING...'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs leading-relaxed">
-                      {iframeMode === 'proxy'
-                        ? 'กำลังบายพาส X-Frame-Options และปลดล็อกการแสดงผลหน้าเว็บ...'
-                        : 'กำลังโหลดหน้าเว็บโดยตรง หากหน้าจอเป็นสีขาว ให้คลิกสลับเป็นโหมด Proxy ด้านบน'}
-                    </p>
-                  </div>
-                )}
-
-                <iframe
-                  key={iframeKey}
-                  ref={webIframeRef}
-                  src={iframeMode === 'proxy' ? `/api/proxy-web?url=${encodeURIComponent(item.url)}` : item.url}
-                  title={item.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  onLoad={() => setIframeLoading(false)}
-                  className="w-full h-full border-0 relative z-10"
-                  style={{ backgroundColor: '#090a0f' }}
-                />
-              </>
-            )}
-          </div>
-
-          {/* Direct fallback bar beneath the iframe */}
-          <div className="px-4 py-3 bg-black/60 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-              <span className="text-[11px] sm:text-xs text-slate-300">
-                หากเว็บไซต์ติดระบบป้องกัน Anti-Bot / Cloudflare หรือแสดงหน้าขาว:
+              <span className="font-mono text-cyan-300 font-semibold truncate max-w-xs sm:max-w-md">
+                {item.siteName || domain}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              {iframeMode !== 'proxy' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIframeMode('proxy');
-                    setIframeLoading(true);
-                    setIframeKey((k) => k + 1);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition-all active:scale-95"
-                >
-                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>สลับเป็นโหมด Proxy</span>
-                </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowSnapshot(!showSnapshot)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                  showSnapshot
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                    : 'bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 border border-white/10'
+                }`}
+                title={showSnapshot ? 'สลับกลับไปดูภาพหน้าปก' : 'สลับดูภาพแคปเจอร์หน้าเว็บสด'}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>{showSnapshot ? 'ดูรูปหน้าปก' : 'ภาพสด Snapshot'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Media Preview Box */}
+          <div className="relative aspect-[16/9] sm:aspect-[21/9] max-h-[420px] w-full bg-[#08090f] overflow-hidden flex items-center justify-center group">
+            <img
+              src={displayImg}
+              alt={item.title}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                if (!showSnapshot && target.src !== liveSnapshotUrl) {
+                  target.src = liveSnapshotUrl;
+                } else {
+                  target.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80';
+                }
+              }}
+            />
+            {/* Ambient Dark Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#090a0f] via-transparent to-black/30 pointer-events-none" />
+
+            {/* Quick Access Overlay on Image */}
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute inset-0 m-auto w-fit h-fit flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-black/75 hover:bg-cyan-500 text-slate-100 hover:text-slate-950 font-semibold text-xs border border-white/20 hover:border-cyan-400 shadow-2xl backdrop-blur-md transition-all duration-200 transform scale-95 hover:scale-105"
+            >
+              <ExternalLink className="w-4 h-4 stroke-[2.5]" />
+              <span>คลิกเพื่อเปิดเว็บไซต์ปลายทาง ↗</span>
+            </a>
+          </div>
+
+          {/* Title, Details, & Primary Actions */}
+          <div className="p-4 sm:p-6 space-y-4 bg-gradient-to-b from-transparent to-[#090a0f]">
+            <div className="space-y-2">
+              <h3 className="text-lg sm:text-2xl font-bold font-display text-slate-100 leading-snug tracking-wide">
+                {decodeHtmlEntities(item.title)}
+              </h3>
+              {item.description && (
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+                  {decodeHtmlEntities(item.description)}
+                </p>
               )}
+            </div>
+
+            {/* Action Bar */}
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
               <a
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 hover:from-emerald-400 hover:to-teal-300 transition-all touch-target shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
+                className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 text-slate-950 hover:brightness-110 shadow-[0_0_25px_rgba(6,182,212,0.35)] transition-all active:scale-[0.98] font-display tracking-wider"
               >
-                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>เปิด {item.siteName || getDomainFromUrl(item.url)} ในแท็บใหม่ (เปิดได้ 100%)</span>
+                <ExternalLink className="w-4 h-4 stroke-[2.5]" />
+                <span>เข้าสู่เว็บไซต์ต้นฉบับ ({item.siteName || domain}) ↗</span>
               </a>
+
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-[0.98]"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copied ? t.card.copied : t.card.copyUrl}</span>
+              </button>
             </div>
           </div>
         </div>
