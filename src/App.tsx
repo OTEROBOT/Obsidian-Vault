@@ -140,67 +140,35 @@ export default function App() {
 
   // Synchronize liked & bookmarked items whenever user identity or login status changes
   useEffect(() => {
-    const localLikes = new Set(loadUserLikes(user));
-    const localBookmarks = new Set(loadUserBookmarks(user));
-    setUserLikedItemIds(localLikes);
-    setUserBookmarkedItemIds(localBookmarks);
-
-    // If user is logged in with an email, synchronize with Supabase Cloud interactions
-    if (user.isLoggedIn && user.email) {
-      fetchUserInteractionsFromSupabase(user.email).then((cloudData) => {
-        if (cloudData) {
-          const mergedLikes = new Set([...Array.from(localLikes), ...(cloudData.likes || [])]);
-          const mergedBookmarks = new Set([...Array.from(localBookmarks), ...(cloudData.bookmarks || [])]);
-
-          setUserLikedItemIds(mergedLikes);
-          setUserBookmarkedItemIds(mergedBookmarks);
-          saveUserLikes(user, Array.from(mergedLikes));
-          saveUserBookmarks(user, Array.from(mergedBookmarks));
-
-          // Also reconcile items likesCount with mergedLikes
-          setItems((prevItems) => {
-            let changed = false;
-            const updated = prevItems.map((it) => {
-              if (mergedLikes.has(it.id) && (!it.likesCount || it.likesCount === 0)) {
-                changed = true;
-                return { ...it, likesCount: 1 };
-              }
-              return it;
-            });
-            if (changed) {
-              saveItems(updated);
-              return updated;
-            }
-            return prevItems;
-          });
-
-          // If local had new items not yet in cloud, push merged set back to cloud
-          if (localLikes.size > (cloudData.likes?.length || 0) || localBookmarks.size > (cloudData.bookmarks?.length || 0)) {
-            saveUserInteractionsToSupabase(user.email, Array.from(mergedLikes), Array.from(mergedBookmarks)).catch(() => {});
-          }
-        } else if (localLikes.size > 0 || localBookmarks.size > 0) {
-          saveUserInteractionsToSupabase(user.email, Array.from(localLikes), Array.from(localBookmarks)).catch(() => {});
-        }
-      }).catch((err) => {
-        console.warn('User cloud interactions sync warning:', err);
-      });
+    // 1. If guest or not logged in: load only guest items
+    if (!user.isLoggedIn || !user.email) {
+      const guestLikes = new Set(loadUserLikes(user));
+      const guestBookmarks = new Set(loadUserBookmarks(user));
+      setUserLikedItemIds(guestLikes);
+      setUserBookmarkedItemIds(guestBookmarks);
+      return;
     }
 
-    // Reconcile items likesCount so any liked item has at least 1 like
-    setItems((prevItems) => {
-      let changed = false;
-      const updated = prevItems.map((it) => {
-        if (localLikes.has(it.id) && (!it.likesCount || it.likesCount === 0)) {
-          changed = true;
-          return { ...it, likesCount: 1 };
-        }
-        return it;
-      });
-      if (changed) {
-        saveItems(updated);
-        return updated;
+    // 2. If logged in with an email:
+    // Load local storage strictly for this user email
+    const userLocalLikes = new Set(loadUserLikes(user));
+    const userLocalBookmarks = new Set(loadUserBookmarks(user));
+    setUserLikedItemIds(userLocalLikes);
+    setUserBookmarkedItemIds(userLocalBookmarks);
+
+    // Fetch cloud data for this specific user account
+    fetchUserInteractionsFromSupabase(user.email).then((cloudData) => {
+      if (cloudData) {
+        const cloudLikes = new Set(cloudData.likes || []);
+        const cloudBookmarks = new Set(cloudData.bookmarks || []);
+
+        setUserLikedItemIds(cloudLikes);
+        setUserBookmarkedItemIds(cloudBookmarks);
+        saveUserLikes(user, Array.from(cloudLikes));
+        saveUserBookmarks(user, Array.from(cloudBookmarks));
       }
-      return prevItems;
+    }).catch((err) => {
+      console.warn('User cloud interactions sync warning:', err);
     });
   }, [user.id, user.email, user.isLoggedIn]);
 
@@ -377,6 +345,8 @@ export default function App() {
         } else if (event === 'SIGNED_OUT') {
           setUser(INITIAL_USER);
           saveUser(INITIAL_USER);
+          setUserLikedItemIds(new Set());
+          setUserBookmarkedItemIds(new Set());
         }
       }
     );
@@ -1010,6 +980,24 @@ export default function App() {
     });
   }, [user, userLikedItemIds]);
 
+  const handleClearAllUserLikes = useCallback(() => {
+    setUserLikedItemIds(new Set());
+    saveUserLikes(user, []);
+    if (user.isLoggedIn && user.email) {
+      saveUserInteractionsToSupabase(user.email, [], Array.from(userBookmarkedItemIds)).catch(() => {});
+    }
+    showToast('ล้างรายการถูกใจทั้งหมดของบัญชีนี้เรียบร้อยแล้ว');
+  }, [user, userBookmarkedItemIds]);
+
+  const handleClearAllUserBookmarks = useCallback(() => {
+    setUserBookmarkedItemIds(new Set());
+    saveUserBookmarks(user, []);
+    if (user.isLoggedIn && user.email) {
+      saveUserInteractionsToSupabase(user.email, Array.from(userLikedItemIds), []).catch(() => {});
+    }
+    showToast('ล้างรายการบุ๊กมาร์กทั้งหมดของบัญชีนี้เรียบร้อยแล้ว');
+  }, [user, userLikedItemIds]);
+
   // Stable handlers for editing and tags to ensure MediaCard memoization
   const handleEditItem = useCallback((it: MediaItem) => {
     setEditingItem(it);
@@ -1317,6 +1305,10 @@ export default function App() {
   const handleLogin = (newUser: UserProfile) => {
     setUser(newUser);
     saveUser(newUser);
+    const userLikes = new Set(loadUserLikes(newUser));
+    const userBookmarks = new Set(loadUserBookmarks(newUser));
+    setUserLikedItemIds(userLikes);
+    setUserBookmarkedItemIds(userBookmarks);
     showToast(`Welcome back, ${newUser.name}`);
   };
 
@@ -1326,6 +1318,8 @@ export default function App() {
     // 1. Immediately reset state synchronously in React
     setUser(INITIAL_USER);
     saveUser(INITIAL_USER);
+    setUserLikedItemIds(new Set());
+    setUserBookmarkedItemIds(new Set());
 
     // 2. Close all open overlays
     setIsProfileOpen(false);
@@ -1794,6 +1788,8 @@ export default function App() {
             onToggleBookmark={handleToggleBookmark}
             onUnbookmark={handleToggleBookmark}
             onDeleteComment={handleDeleteComment}
+            onClearLikes={handleClearAllUserLikes}
+            onClearBookmarks={handleClearAllUserBookmarks}
             onLogout={handleLogout}
             onOpenAuth={() => {
               setIsProfileOpen(false);

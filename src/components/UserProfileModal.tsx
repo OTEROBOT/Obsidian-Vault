@@ -13,7 +13,9 @@ import {
   Eye, 
   Search,
   CheckCircle,
-  Maximize2
+  Maximize2,
+  AlertTriangle,
+  ShieldAlert
 } from 'lucide-react';
 import { Comment, MediaItem, UserProfile } from '../types';
 import { decodeHtmlEntities } from '../utils/text';
@@ -33,6 +35,8 @@ interface UserProfileModalProps {
   onPreview?: (item: MediaItem) => void;
   onPreviewItem?: (item: MediaItem) => void;
   onDeleteComment?: (commentId: string) => void;
+  onClearLikes?: () => void;
+  onClearBookmarks?: () => void;
   onOpenAuth?: () => void;
   onLogout?: () => void;
 }
@@ -52,6 +56,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onPreview,
   onPreviewItem,
   onDeleteComment,
+  onClearLikes,
+  onClearBookmarks,
   onOpenAuth,
   onLogout,
 }) => {
@@ -66,6 +72,39 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   });
   const [searchQuery, setSearchQuery] = useState('');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Two-Step Confirmation Safety State (Prevents accidental mass deletions)
+  const [clearTarget, setClearTarget] = useState<'likes' | 'bookmarks' | null>(null);
+  const [confirmStep, setConfirmStep] = useState<1 | 2>(1);
+  const [confirmInput, setConfirmInput] = useState('');
+
+  const targetCount = clearTarget === 'likes' ? userLikedItemIds.size : userBookmarkedItemIds.size;
+  const targetLabel = clearTarget === 'likes' ? 'โพสต์ที่ถูกใจ' : 'บุ๊กมาร์กที่บันทึก';
+
+  const handleStartClear = (target: 'likes' | 'bookmarks') => {
+    setClearTarget(target);
+    setConfirmStep(1);
+    setConfirmInput('');
+  };
+
+  const handleCancelClear = () => {
+    setClearTarget(null);
+    setConfirmStep(1);
+    setConfirmInput('');
+  };
+
+  const handleExecuteClear = () => {
+    const trimmed = confirmInput.trim().toUpperCase();
+    if (trimmed !== 'CLEAR' && confirmInput.trim() !== 'ลบ') {
+      return;
+    }
+    if (clearTarget === 'likes') {
+      onClearLikes?.();
+    } else if (clearTarget === 'bookmarks') {
+      onClearBookmarks?.();
+    }
+    handleCancelClear();
+  };
 
   const handlePreviewAction = onPreview || onPreviewItem;
   const handleLikeAction = onLike || onUnlike;
@@ -348,24 +387,50 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </button>
           </div>
 
-          {/* Mini Search inside profile */}
-          <div className="relative w-full sm:w-56">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหาในประวัตินี้..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-900/90 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+          {/* Mini Search & Clear Actions inside profile */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {activeTab === 'likes' && likedItems.length > 0 && onClearLikes && (
+              <button
+                type="button"
+                onClick={() => handleStartClear('likes')}
+                className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all flex items-center gap-1 shrink-0"
+                title="ยกเลิกการถูกใจทั้งหมดของฉัน (มีระบบยืนยัน 2 ขั้นตอน)"
               >
-                <X className="w-3 h-3" />
+                <Trash2 className="w-3 h-3" />
+                <span>ล้างทั้งหมด</span>
               </button>
             )}
+
+            {activeTab === 'bookmarks' && bookmarkedItems.length > 0 && onClearBookmarks && (
+              <button
+                type="button"
+                onClick={() => handleStartClear('bookmarks')}
+                className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition-all flex items-center gap-1 shrink-0"
+                title="ลบรายการบุ๊กมาร์กทั้งหมดของฉัน (มีระบบยืนยัน 2 ขั้นตอน)"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>ล้างทั้งหมด</span>
+              </button>
+            )}
+
+            <div className="relative flex-1 sm:w-52">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหาในประวัตินี้..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-900/90 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -657,6 +722,96 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             ปิดหน้าต่าง
           </button>
         </div>
+
+        {/* Two-Step Confirmation Safety Modal */}
+        {clearTarget && (
+          <div 
+            className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in-50 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative w-full max-w-md rounded-2xl bg-[#0e121d] border border-rose-500/40 shadow-2xl p-5 sm:p-6 text-center animate-in zoom-in-95 duration-150">
+              {confirmStep === 1 ? (
+                <>
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-3.5">
+                    <AlertTriangle className="w-6 h-6 stroke-[2]" />
+                  </div>
+                  <div className="inline-block px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-mono font-bold mb-2">
+                    ขั้นตอนที่ 1 จาก 2 : ยืนยันความตั้งใจ
+                  </div>
+                  <h3 className="text-base font-bold text-slate-100">
+                    ล้างรายการ{targetLabel}ทั้งหมด?
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    คุณกำลังจะลบรายการ{targetLabel}ทั้งหมดจำนวน <strong className="text-rose-400 font-mono text-sm">{targetCount}</strong> รายการ ข้อมูลนี้จะถูกล้างออกจากเครื่องและคลาวด์อย่างถาวร
+                  </p>
+
+                  <div className="flex items-center gap-2.5 mt-5">
+                    <button
+                      type="button"
+                      onClick={handleCancelClear}
+                      className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-colors cursor-pointer"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmStep(2)}
+                      className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white shadow-lg shadow-rose-950/40 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>ไปยังขั้นตอนยืนยันสุดท้าย</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto mb-3.5 animate-pulse">
+                    <ShieldAlert className="w-6 h-6 stroke-[2]" />
+                  </div>
+                  <div className="inline-block px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-mono font-bold mb-2">
+                    ขั้นตอนที่ 2 จาก 2 : ความปลอดภัยขั้นสูงสุด
+                  </div>
+                  <h3 className="text-base font-bold text-slate-100">
+                    ยืนยันคำสั่งลบถาวร
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                    เพื่อป้องกันการแตะโดนโดยไม่ตั้งใจ โปรดพิมพ์คำว่า <span className="font-mono font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">CLEAR</span> หรือ <span className="font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">ลบ</span> เพื่อปลดล็อกปุ่มลบ:
+                  </p>
+
+                  <div className="mt-3.5">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={confirmInput}
+                      onChange={(e) => setConfirmInput(e.target.value)}
+                      placeholder="พิมพ์ CLEAR หรือ ลบ ที่นี่..."
+                      className="w-full text-center py-2 px-3 rounded-xl text-sm font-mono bg-slate-950 border border-rose-500/40 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2.5 mt-5">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmStep(1)}
+                      className="py-2 px-3 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-400 transition-colors cursor-pointer"
+                    >
+                      ← ย้อนกลับ
+                    </button>
+                    <button
+                      type="button"
+                      disabled={confirmInput.trim().toUpperCase() !== 'CLEAR' && confirmInput.trim() !== 'ลบ'}
+                      onClick={handleExecuteClear}
+                      className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 disabled:opacity-35 disabled:hover:bg-rose-600 text-white shadow-lg shadow-rose-900/40 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>ยืนยันลบทั้งหมดถาวร</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -648,30 +648,17 @@ export async function fetchUserInteractionsFromSupabase(email: string): Promise<
           updatedAt: parsed.updatedAt || new Date().toISOString(),
         };
       } catch {
-        // Continue to fallback
+        // Continue to fresh state
       }
     }
 
-    // Fallback: If no user sync record exists yet, check if there are any items with likes_count > 0 in Supabase
-    // to auto-recover likes for the vault admin/owner
-    const { data: likedRows } = await supabase
-      .from('vault_items')
-      .select('id')
-      .gt('likes_count', 0)
-      .not('id', 'like', 'user_data_%')
-      .neq('id', SYSTEM_CONFIG_ITEM_ID);
-
-    if (likedRows && likedRows.length > 0) {
-      const recoveredLikes = likedRows.map((r) => r.id);
-      return {
-        email: cleanEmail,
-        likes: recoveredLikes,
-        bookmarks: [],
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    return null;
+    // New user with no prior cloud interactions record starts with clean 0 likes and 0 bookmarks
+    return {
+      email: cleanEmail,
+      likes: [],
+      bookmarks: [],
+      updatedAt: new Date().toISOString(),
+    };
   } catch (err) {
     console.warn('Fetch user interactions exception:', err);
     return null;
