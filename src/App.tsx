@@ -59,7 +59,9 @@ import {
   saveSavedFilters,
   loadViewMode,
   saveViewMode,
-  assignSequentialItemNumbers
+  assignSequentialItemNumbers,
+  saveReadingPost,
+  loadReadingPost
 } from './utils/storage';
 import { 
   supabase, 
@@ -288,8 +290,8 @@ export default function App() {
     );
   }, [globalImageFit, items]);
 
-  // Modal & Drawer visibility
-  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  // Modal & Drawer visibility - Restored automatically so switching tabs or leaving to other apps never loses reading progress
+  const [previewItem, setPreviewItem] = useState<MediaItem | null>(() => loadReadingPost());
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MediaItem | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -306,6 +308,42 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // Restore post when returning from another tab, Facebook, or other apps
+  useEffect(() => {
+    const handleTabResume = () => {
+      setPreviewItem((current) => {
+        if (current) return current;
+        return loadReadingPost();
+      });
+    };
+
+    window.addEventListener('focus', handleTabResume, { passive: true });
+    window.addEventListener('pageshow', handleTabResume, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) handleTabResume();
+    }, { passive: true });
+
+    return () => {
+      window.removeEventListener('focus', handleTabResume);
+      window.removeEventListener('pageshow', handleTabResume);
+    };
+  }, []);
+
+  // Keep active preview post synchronized with latest items data without unmounting
+  useEffect(() => {
+    if (previewItem) {
+      const match = items.find((i) => i.id === previewItem.id);
+      if (match && (match.likesCount !== previewItem.likesCount || match.viewsCount !== previewItem.viewsCount || match.title !== previewItem.title)) {
+        setPreviewItem((prev) => {
+          if (!prev) return null;
+          const merged = { ...prev, ...match };
+          saveReadingPost(merged);
+          return merged;
+        });
+      }
+    }
+  }, [items]);
 
   // Keyboard shortcut listener for fast search (Ctrl + K or '/')
   useEffect(() => {
@@ -874,7 +912,14 @@ export default function App() {
 
   const handleOpenPreview = useCallback((item: MediaItem) => {
     const newViewsCount = handleRecordView(item);
-    setPreviewItem({ ...item, viewsCount: newViewsCount });
+    const updated = { ...item, viewsCount: newViewsCount };
+    setPreviewItem(updated);
+    saveReadingPost(updated);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', item.id);
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
   }, [handleRecordView]);
 
   // 1 Account = 1 Like Toggle System (Click to like, click again to remove like)
@@ -1630,6 +1675,12 @@ export default function App() {
             isBookmarked={userBookmarkedItemIds.has(previewItem.id)}
             onClose={() => {
               setPreviewItem(null);
+              saveReadingPost(null);
+              try {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('view');
+                window.history.replaceState(null, '', url.pathname + (url.search ? url.search : '') + url.hash);
+              } catch {}
               if (returnToProfile) {
                 setReturnToProfile(false);
                 setIsProfileOpen(true);

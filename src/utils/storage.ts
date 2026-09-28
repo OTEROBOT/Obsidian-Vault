@@ -699,4 +699,60 @@ export function saveViewMode(mode: 'grid' | 'large' | 'compact'): void {
   }
 }
 
+/**
+ * Persist currently active reading post so switching apps (e.g. to Facebook or other tabs)
+ * or browser restarts / memory purges never lose the opened post or reading position.
+ */
+export function saveReadingPost(item: MediaItem | null): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (item) {
+      window.localStorage.setItem('obsidian_vault_reading_post_id', item.id);
+      window.localStorage.setItem('obsidian_vault_reading_post_data', JSON.stringify(item));
+      window.sessionStorage.setItem('obsidian_vault_reading_post_id', item.id);
+    } else {
+      window.localStorage.removeItem('obsidian_vault_reading_post_id');
+      window.localStorage.removeItem('obsidian_vault_reading_post_data');
+      window.sessionStorage.removeItem('obsidian_vault_reading_post_id');
+    }
+  } catch (e) {
+    console.warn('saveReadingPost failed:', e);
+  }
+}
+
+/**
+ * Load currently active reading post on app boot or tab resume
+ */
+export function loadReadingPost(): MediaItem | null {
+  try {
+    if (typeof window === 'undefined') return null;
+
+    // 1. Try restoring full serialized post data (instant millisecond-0 render)
+    const rawData = window.localStorage.getItem('obsidian_vault_reading_post_data');
+    if (rawData) {
+      try {
+        const parsed = JSON.parse(rawData);
+        if (parsed && typeof parsed === 'object' && parsed.id && parsed.url) {
+          return parsed as MediaItem;
+        }
+      } catch {}
+    }
+
+    // 2. Try ID lookup in stored items
+    const id = window.localStorage.getItem('obsidian_vault_reading_post_id') ||
+               window.sessionStorage.getItem('obsidian_vault_reading_post_id') ||
+               (typeof window.location !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null);
+
+    if (id) {
+      const items = loadItems();
+      const match = items.find((i) => i.id === id);
+      if (match) return match;
+    }
+  } catch (e) {
+    console.warn('loadReadingPost failed:', e);
+  }
+  return null;
+}
+
+
 

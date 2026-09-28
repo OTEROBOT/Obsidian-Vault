@@ -110,15 +110,6 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
         // Safe catch
       }
     }
-
-    // 4. Clear Web Iframe
-    if (webIframeRef.current) {
-      try {
-        webIframeRef.current.src = 'about:blank';
-      } catch {
-        // Safe catch
-      }
-    }
   }, []);
 
   const handleSafeClose = useCallback(() => {
@@ -126,16 +117,20 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
     onClose();
   }, [disposeMedia, onClose]);
 
-  // Cleanup on unmount or item ID change
+  // Track previous item ID so switching tabs or re-rendering never reloads the reading iframe
+  const prevItemIdRef = useRef(item.id);
   useEffect(() => {
-    setImageZoom(1);
-    setIframeLoading(true);
-    setShowSnapshotView(false);
-    setIframeKey((k) => k + 1);
+    if (prevItemIdRef.current !== item.id) {
+      prevItemIdRef.current = item.id;
+      setImageZoom(1);
+      setIframeLoading(true);
+      setShowSnapshotView(false);
+      setIframeKey((k) => k + 1);
+    }
     return () => {
       disposeMedia();
     };
-  }, [disposeMedia, item.id, item.url]);
+  }, [disposeMedia, item.id]);
 
   // Close on Escape key
   useEffect(() => {
@@ -504,7 +499,6 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   return (
     <div 
       className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-y-auto"
-      onClick={handleSafeClose}
     >
       <div 
         className="relative w-full max-w-5xl rounded-2xl sm:rounded-3xl glass-panel border border-cyan-500/30 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden my-auto max-h-[95vh] flex flex-col gpu-layer animate-in fade-in-50 zoom-in-95 duration-200"
