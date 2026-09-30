@@ -283,8 +283,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* 🌓 Theme Mode Toggle (Dark / Light / System) */}
-          <div className="relative" ref={themeRef}>
+          {/* 🌓 Theme Mode Toggle (Dark / Light / System) - Hidden on mobile to prevent navbar crowding */}
+          <div className="relative hidden sm:block" ref={themeRef}>
             <button
               onClick={() => {
                 setIsThemeOpen(!isThemeOpen);
@@ -406,7 +406,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* User Profile / Auth Toggle */}
           {user.isLoggedIn ? (
-            <div className="flex items-center gap-1 sm:gap-2 pl-1.5 sm:pl-2 border-l border-white/10">
+            <div className="flex items-center gap-1 sm:gap-2 pl-0 sm:pl-2 border-l-0 sm:border-l border-white/10">
               <button
                 onClick={onOpenProfile || onOpenAuth}
                 className="flex items-center gap-2 text-left group hover:opacity-90 transition-opacity"
@@ -429,12 +429,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </button>
 
-              {/* Direct Logout Button in Navbar */}
+              {/* Direct Logout Button in Navbar - Hidden on mobile screens to prevent avatar clipping */}
               <button
                 type="button"
                 onClick={onLogout}
                 title={t.nav.signOut || 'ออกจากระบบ'}
-                className="flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
+                className="hidden sm:flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
                 aria-label={t.nav.signOut || 'ออกจากระบบ'}
               >
                 <LogOut className="w-3.5 h-3.5 text-rose-400" />

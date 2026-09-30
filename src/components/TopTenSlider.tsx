@@ -101,10 +101,11 @@ export const TopTenSlider: React.FC<TopTenSliderProps> = ({
             <Flame className="w-3.5 h-3.5 sm:w-5 sm:h-5 fill-slate-950 animate-pulse" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
               <h2 className="text-xs sm:text-base font-bold text-slate-100 font-display tracking-wide flex items-center gap-1.5 truncate">
-                <span className="truncate">10 อันดับโพสต์ยอดนิยม</span>
-                <span className="text-[10px] sm:text-[11px] font-mono font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 shrink-0">
+                <span className="sm:hidden truncate">10 อันดับยอดนิยม</span>
+                <span className="hidden sm:inline truncate">10 อันดับโพสต์ยอดนิยม</span>
+                <span className="hidden sm:inline-block text-[10px] sm:text-[11px] font-mono font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 shrink-0">
                   TOP 10
                 </span>
               </h2>

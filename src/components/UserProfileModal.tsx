@@ -252,25 +252,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Top Header */}
-        <div className="relative px-5 sm:px-7 py-5 border-b border-white/10 bg-gradient-to-r from-[#101524] via-[#0b0e17] to-[#121626] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3.5">
-            <div className="relative">
+        <div className="relative px-4 sm:px-7 py-3.5 sm:py-5 border-b border-white/10 bg-gradient-to-r from-[#101524] via-[#0b0e17] to-[#121626] flex items-center justify-between shrink-0 gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+            <div className="relative shrink-0">
               <img
                 src={user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
                 alt={user.name}
-                className="w-12 h-12 rounded-2xl object-cover ring-2 ring-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl object-cover ring-2 ring-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
               />
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-[#0b0e17] flex items-center justify-center" title="Online">
+              <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-emerald-500 border-2 border-[#0b0e17] flex items-center justify-center" title="Online">
                 <span className="w-1.5 h-1.5 rounded-full bg-white" />
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-100 font-display">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-lg font-bold text-slate-100 font-display truncate max-w-[140px] sm:max-w-none">
                   {user.name}
                 </h2>
-                <span className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded-full border ${
+                <span className={`text-[10px] font-mono whitespace-nowrap shrink-0 font-bold px-2 py-0.5 rounded-full border ${
                   user.role === 'admin'
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                     : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
@@ -278,26 +278,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   {user.role === 'admin' ? '🛡️ ผู้ดูแลระบบ' : '⭐ สมาชิกทั่วไป'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-400 font-mono mt-0.5 truncate">
                 {user.email}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleLogoutClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
-              title="ออกจากระบบ (Sign Out)"
-            >
-              <LogOut className="w-3.5 h-3.5 text-rose-400" />
-              <span>ออกจากระบบ</span>
-            </button>
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors touch-target"
+              className="p-1.5 sm:p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors touch-target"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
@@ -309,7 +300,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         <div className="grid grid-cols-3 border-b border-white/10 bg-white/[0.02] shrink-0 divide-x divide-white/10">
           <button
             onClick={() => handleTabChange('likes')}
-            className={`py-3 px-3 text-center transition-colors ${
+            className={`py-2.5 sm:py-3 px-2 sm:px-3 text-center transition-colors ${
               activeTab === 'likes' ? 'bg-rose-500/10' : 'hover:bg-white/[0.04]'
             }`}
           >
@@ -317,12 +308,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
               <span>{likedItems.length}</span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">โพสต์ที่กดถูกใจ</p>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 font-medium truncate">
+              <span className="sm:hidden">ถูกใจ</span>
+              <span className="hidden sm:inline">โพสต์ที่กดถูกใจ</span>
+            </p>
           </button>
 
           <button
             onClick={() => handleTabChange('bookmarks')}
-            className={`py-3 px-3 text-center transition-colors ${
+            className={`py-2.5 sm:py-3 px-2 sm:px-3 text-center transition-colors ${
               activeTab === 'bookmarks' ? 'bg-amber-500/10' : 'hover:bg-white/[0.04]'
             }`}
           >
@@ -330,12 +324,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <Bookmark className="w-4 h-4 fill-amber-400 text-amber-400" />
               <span>{bookmarkedItems.length}</span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">บุ๊กมาร์กที่บันทึก</p>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 font-medium truncate">
+              <span className="sm:hidden">บุ๊กมาร์ก</span>
+              <span className="hidden sm:inline">บุ๊กมาร์กที่บันทึก</span>
+            </p>
           </button>
 
           <button
             onClick={() => handleTabChange('comments')}
-            className={`py-3 px-3 text-center transition-colors ${
+            className={`py-2.5 sm:py-3 px-2 sm:px-3 text-center transition-colors ${
               activeTab === 'comments' ? 'bg-cyan-500/10' : 'hover:bg-white/[0.04]'
             }`}
           >
@@ -343,57 +340,79 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <MessageSquare className="w-4 h-4 text-cyan-400" />
               <span>{userComments.length}</span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">ความคิดเห็นของฉัน</p>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 font-medium truncate">
+              <span className="sm:hidden">ความคิดเห็น</span>
+              <span className="hidden sm:inline">ความคิดเห็นของฉัน</span>
+            </p>
           </button>
         </div>
 
         {/* Tab Switcher & Search Bar */}
-        <div className="px-5 sm:px-7 py-3 border-b border-white/10 bg-[#0e121d] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto no-scrollbar">
+        <div className="px-3.5 sm:px-7 py-2.5 sm:py-3 border-b border-white/10 bg-[#0e121d] flex flex-col gap-2.5 shrink-0">
+          <div className="grid grid-cols-3 gap-1 sm:gap-1.5 w-full">
             <button
               onClick={() => handleTabChange('likes')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`py-1.5 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
                 activeTab === 'likes'
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Heart className={`w-3.5 h-3.5 ${activeTab === 'likes' ? 'fill-rose-400' : ''}`} />
-              <span>ถูกใจ ({likedItems.length})</span>
+              <Heart className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${activeTab === 'likes' ? 'fill-rose-400' : ''}`} />
+              <span className="truncate">ถูกใจ ({likedItems.length})</span>
             </button>
 
             <button
               onClick={() => handleTabChange('bookmarks')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`py-1.5 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
                 activeTab === 'bookmarks'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Bookmark className={`w-3.5 h-3.5 ${activeTab === 'bookmarks' ? 'fill-amber-400' : ''}`} />
-              <span>บุ๊กมาร์ก ({bookmarkedItems.length})</span>
+              <Bookmark className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${activeTab === 'bookmarks' ? 'fill-amber-400' : ''}`} />
+              <span className="truncate">บุ๊กมาร์ก ({bookmarkedItems.length})</span>
             </button>
 
             <button
               onClick={() => handleTabChange('comments')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`py-1.5 px-1.5 sm:px-2 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
                 activeTab === 'comments'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>ความคิดเห็น ({userComments.length})</span>
+              <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">คอมเมนต์ ({userComments.length})</span>
             </button>
           </div>
 
           {/* Mini Search & Clear Actions inside profile */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหาในประวัตินี้..."
+                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl bg-slate-900/90 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
             {activeTab === 'likes' && likedItems.length > 0 && onClearLikes && (
               <button
                 type="button"
                 onClick={() => handleStartClear('likes')}
-                className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all flex items-center gap-1 shrink-0"
+                className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                 title="ยกเลิกการถูกใจทั้งหมดของฉัน (มีระบบยืนยัน 2 ขั้นตอน)"
               >
                 <Trash2 className="w-3 h-3" />
@@ -405,32 +424,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleStartClear('bookmarks')}
-                className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition-all flex items-center gap-1 shrink-0"
+                className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                 title="ลบรายการบุ๊กมาร์กทั้งหมดของฉัน (มีระบบยืนยัน 2 ขั้นตอน)"
               >
                 <Trash2 className="w-3 h-3" />
                 <span>ล้างทั้งหมด</span>
               </button>
             )}
-
-            <div className="relative flex-1 sm:w-52">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ค้นหาในประวัตินี้..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-900/90 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
-              />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
           </div>
         </div>
 

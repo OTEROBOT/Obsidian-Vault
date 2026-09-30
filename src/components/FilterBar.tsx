@@ -153,12 +153,12 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
 
         {/* Secondary Filters: Sort, Pinned, View Mode, Clear */}
-        <div className="flex items-center gap-2 ml-auto flex-wrap">
+        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full md:w-auto min-w-0">
           
           {/* Pinned Only Toggle */}
           <button
             onClick={() => onFilterChange({ ...filters, pinnedOnly: !filters.pinnedOnly })}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all touch-target ${
+            className={`flex items-center justify-center p-2 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-medium border transition-all touch-target shrink-0 ${
               filters.pinnedOnly
                 ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
                 : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'
@@ -166,17 +166,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             title={t.filters.pinned}
           >
             <Pin className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t.filters.pinned}</span>
+            <span className="hidden lg:inline ml-1.5">{t.filters.pinned}</span>
           </button>
 
           {/* Sort By Dropdown */}
-          <div className="relative flex items-center">
+          <div className="relative flex items-center flex-1 sm:flex-initial min-w-0">
             <ArrowUpDown className="absolute left-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <select
               value={filters.sortBy}
               onChange={(e) => onFilterChange({ ...filters, sortBy: e.target.value as any })}
               aria-label={t.filters.sortBy}
-              className="pl-8 pr-6 py-1.5 text-xs rounded-lg glass-input text-slate-300 appearance-none cursor-pointer focus:text-white"
+              className="w-full sm:w-auto pl-8 pr-6 py-1.5 text-xs rounded-lg glass-input text-slate-300 appearance-none cursor-pointer focus:text-white truncate"
             >
               <option value="newest" className="bg-slate-900 text-white">{t.filters.newest}</option>
               <option value="oldest" className="bg-slate-900 text-white">{t.filters.oldest}</option>
@@ -187,7 +187,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </div>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-black/40 dark:bg-black/40 p-0.5 rounded-lg border border-white/10 shadow-sm">
+          <div className="flex items-center bg-black/40 dark:bg-black/40 p-0.5 rounded-lg border border-white/10 shadow-sm shrink-0">
             <button
               onClick={() => onViewModeChange('grid')}
               className={`p-1.5 rounded text-xs transition-colors touch-target ${
@@ -225,29 +225,27 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <button
               type="button"
               onClick={onToggleAllCardsImageFit}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 touch-target ${
+              className={`flex items-center justify-center p-2 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 touch-target shrink-0 ${
                 allCardsExpanded
                   ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
                   : 'bg-black/40 hover:bg-black/70 border-white/10 text-slate-300 hover:text-white'
               }`}
               title={
                 allCardsExpanded
-                  ? 'คลิกเพื่อย่อรูปทุกการ์ดกลับเป็นขนาดมาตรฐาน (Reset all card images to standard cover)'
-                  : 'คลิกเพื่อขยายรูปภาพในการ์ดทั้งหมดให้เห็นรูปเต็มทุกการ์ด (Expand all card images to fit full)'
+                  ? 'คลิกเพื่อย่อรูปทุกการ์ดกลับเป็นขนาดมาตรฐาน'
+                  : 'คลิกเพื่อขยายรูปภาพในการ์ดทั้งหมดให้เห็นรูปเต็มทุกการ์ด'
               }
               aria-label="Toggle All Card Images Fit"
             >
               {allCardsExpanded ? (
                 <>
                   <Minimize2 className="w-3.5 h-3.5 text-cyan-400" />
-                  <span className="hidden md:inline font-mono">รูปเต็มทุกการ์ด</span>
-                  <span className="md:hidden text-[11px]">ย่อรูป</span>
+                  <span className="hidden md:inline font-mono ml-1.5">รูปเต็มทุกการ์ด</span>
                 </>
               ) : (
                 <>
                   <Maximize2 className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="hidden md:inline font-mono">ขยายรูปทุกการ์ด</span>
-                  <span className="md:hidden text-[11px]">ขยายรูป</span>
+                  <span className="hidden md:inline font-mono ml-1.5">ขยายรูปทุกการ์ด</span>
                 </>
               )}
             </button>
@@ -257,10 +255,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           {hasActiveFilters && (
             <button
               onClick={clearAllFilters}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-all touch-target"
+              className="flex items-center justify-center p-2 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-all touch-target shrink-0"
+              title={t.filters.reset}
             >
               <X className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t.filters.reset}</span>
+              <span className="hidden sm:inline ml-1">{t.filters.reset}</span>
             </button>
           )}
 
