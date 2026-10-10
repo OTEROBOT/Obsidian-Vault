@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   X, 
   ExternalLink, 
@@ -22,7 +22,12 @@ import {
   RefreshCw,
   Zap,
   ShieldCheck,
-  Camera
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Layers,
+  AlertTriangle
 } from 'lucide-react';
 import { Comment, MediaItem, UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -30,11 +35,14 @@ import { getDomainFromUrl } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
 import { isTwitterOrX, isPixiv, getSafeImageUrl } from '../utils/mediaProxy';
 import { decodeHtmlEntities } from '../utils/text';
+import { findRelatedPosts, RelatedPostMatch } from '../utils/duplicateDetector';
 import { TwitterEmbed } from './TwitterEmbed';
 import { PixivViewer } from './PixivViewer';
+import { OptimizedImage } from './OptimizedImage';
 
 interface EmbeddedMediaViewerProps {
   item: MediaItem;
+  allItems?: MediaItem[];
   user: UserProfile;
   comments: Comment[];
   isLiked?: boolean;
@@ -45,10 +53,12 @@ interface EmbeddedMediaViewerProps {
   onAddComment: (itemId: string, content: string, guestNickname?: string) => void;
   onDeleteComment?: (commentId: string) => void;
   onOpenAuth: () => void;
+  onSelectRelatedItem?: (item: MediaItem) => void;
 }
 
 export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   item,
+  allItems,
   user,
   comments,
   isLiked = false,
@@ -59,6 +69,7 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   onAddComment,
   onDeleteComment,
   onOpenAuth,
+  onSelectRelatedItem,
 }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -69,6 +80,17 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   const [iframeLoading, setIframeLoading] = useState(true);
   const [iframeKey, setIframeKey] = useState(0);
   const [showSnapshotView, setShowSnapshotView] = useState(false);
+  const [showRelatedSection, setShowRelatedSection] = useState(true);
+
+  // Compute similar / duplicate / related posts in real-time
+  const relatedPosts = useMemo(() => {
+    if (!allItems || allItems.length <= 1) return [];
+    return findRelatedPosts(item, allItems, 10);
+  }, [item, allItems]);
+
+  const duplicatePostsCount = useMemo(() => {
+    return relatedPosts.filter((r) => r.isDuplicate).length;
+  }, [relatedPosts]);
 
   // Strict DOM refs for Safari hardware decoder and memory cleanup
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -555,6 +577,142 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
           
           {/* Main Media Player / Embed */}
           {renderMediaContent()}
+
+          {/* Similar & Duplicate Posts Section with Collapsible Show/Hide Toggle */}
+          {relatedPosts.length > 0 && (
+            <div className="rounded-2xl bg-[#0b0e18]/95 border border-white/10 shadow-xl overflow-hidden transition-all">
+              {/* Header with Title and Show/Hide Button */}
+              <div className="px-3.5 sm:px-5 py-3 bg-white/[0.03] border-b border-white/10 flex items-center justify-between gap-2.5 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="p-1.5 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <span>โพสต์เพิ่มเติมที่ใกล้เคียงหรือเนื้อหาเดียวกัน</span>
+                    <span className="font-mono text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold">
+                      {relatedPosts.length} รายการ
+                    </span>
+                  </h3>
+
+                  {duplicatePostsCount > 0 && (
+                    <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse font-semibold">
+                      <AlertTriangle className="w-3 h-3 text-rose-400" />
+                      <span>พบ {duplicatePostsCount} ลิงก์ที่ซ้ำกัน</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Show / Hide Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowRelatedSection(!showRelatedSection)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-cyan-300 hover:text-cyan-200 border border-white/10 transition-colors cursor-pointer select-none touch-target"
+                  aria-label={showRelatedSection ? 'ซ่อนโพสต์ใกล้เคียง' : 'แสดงโพสต์ใกล้เคียง'}
+                >
+                  {showRelatedSection ? (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>ซ่อนโพสต์ใกล้เคียง</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>แสดงโพสต์ใกล้เคียง ({relatedPosts.length})</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Collapsible Content */}
+              {showRelatedSection && (
+                <div className="p-3 sm:p-4 bg-black/20">
+                  <div 
+                    className="flex items-stretch gap-3 overflow-x-auto pb-2 scrollbar-none snap-x"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
+                    {relatedPosts.map((match) => {
+                      const isDup = match.isDuplicate;
+                      const safeThumb = getSafeImageUrl(match.item.thumbnailUrl) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80';
+                      const cleanTitle = decodeHtmlEntities(match.item.title);
+
+                      return (
+                        <div
+                          key={match.item.id}
+                          onClick={() => onSelectRelatedItem?.(match.item)}
+                          className={`w-56 sm:w-64 shrink-0 rounded-xl p-2.5 border transition-all cursor-pointer group flex flex-col justify-between select-none snap-start touch-target ${
+                            isDup
+                              ? 'bg-rose-950/20 hover:bg-rose-950/40 border-rose-500/50 shadow-md ring-1 ring-rose-500/30'
+                              : 'bg-[#0f1422] hover:bg-[#131a2b] border-white/10 hover:border-cyan-500/40 shadow-sm'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            {/* Card Image */}
+                            <div className="relative w-full aspect-[16/10] rounded-lg overflow-hidden bg-slate-950 border border-white/5">
+                              <OptimizedImage
+                                src={safeThumb}
+                                alt={cleanTitle}
+                                containerClassName="w-full h-full"
+                                objectFit="cover"
+                                className="w-full h-full group-hover:scale-105 transition-transform duration-200"
+                              />
+
+                              {/* Badges on Thumbnail */}
+                              <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                                <span className="px-1.5 py-0.5 rounded bg-black/80 font-mono text-[9px] font-bold text-cyan-300 border border-cyan-500/30">
+                                  #{match.item.itemNumber || 1}
+                                </span>
+                                {isDup && (
+                                  <span className="px-1.5 py-0.5 rounded bg-rose-600/90 font-mono text-[9px] font-bold text-white shadow">
+                                    🚨 ซ้ำกัน
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 font-mono text-[9px] text-slate-300 uppercase">
+                                {match.item.mediaType}
+                              </div>
+                            </div>
+
+                            {/* Title & Reason */}
+                            <div>
+                              <h4 
+                                className="text-xs font-semibold text-slate-200 group-hover:text-cyan-300 line-clamp-1 transition-colors"
+                                title={cleanTitle}
+                              >
+                                {cleanTitle}
+                              </h4>
+                              <p className="text-[10px] text-cyan-400/90 font-mono mt-0.5 line-clamp-1">
+                                {match.matchReasons.join(' • ')}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Footer Stats & Open Action */}
+                          <div className="flex items-center justify-between pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-400 font-mono">
+                            <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1 text-rose-400">
+                                <Heart className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
+                                <span>{match.item.likesCount || 0}</span>
+                              </span>
+                              <span className="flex items-center gap-1 text-slate-400">
+                                <Eye className="w-2.5 h-2.5" />
+                                <span>{match.item.viewsCount || 0}</span>
+                              </span>
+                            </div>
+
+                            <span className="text-cyan-400 font-semibold group-hover:underline flex items-center gap-0.5">
+                              <span>ดูโพสต์นี้</span>
+                              <span>→</span>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Details & Interactive Commenting Section */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 pt-2">

@@ -12,7 +12,8 @@ import {
   Sun, 
   Laptop,
   ExternalLink,
-  Check
+  Check,
+  Layers
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -30,6 +31,8 @@ interface MobileDrawerProps {
   onOpenAddLink: () => void;
   onOpenAdmin: () => void;
   onOpenRecent: () => void;
+  onOpenDuplicateChecker?: () => void;
+  duplicateCount?: number;
   recentCount: number;
 }
 
@@ -43,6 +46,8 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onOpenAddLink,
   onOpenAdmin,
   onOpenRecent,
+  onOpenDuplicateChecker,
+  duplicateCount = 0,
   recentCount,
 }) => {
   const { t, language, setLanguage, languages } = useTranslation();
@@ -179,6 +184,34 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                 </span>
               )}
             </button>
+
+            {onOpenDuplicateChecker && (
+              <button
+                onClick={() => {
+                  onOpenDuplicateChecker();
+                  onClose();
+                }}
+                className={`w-full flex items-center justify-between p-3 rounded-xl transition-all touch-target cursor-pointer ${
+                  duplicateCount > 0
+                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Layers className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-medium">ตรวจลิงก์ซ้ำ (Deduplication)</span>
+                </div>
+                {duplicateCount > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/25 text-rose-300 border border-rose-500/40 animate-pulse">
+                    {duplicateCount} กลุ่มซ้ำ
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    ไม่พบซ้ำ
+                  </span>
+                )}
+              </button>
+            )}
 
             {isRealAdmin && (
               <button

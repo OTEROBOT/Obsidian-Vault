@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   Shield, 
@@ -19,17 +19,18 @@ import {
   Heart, 
   FileText, 
   Download, 
-  RefreshCw,
-  ExternalLink,
-  ChevronRight,
-  Image as ImageIcon,
-  Upload,
-  Sparkles,
-  Sliders,
-  RotateCcw,
-  CheckCircle2,
-  Palette,
-  LogOut
+  RefreshCw, 
+  ExternalLink, 
+  ChevronRight, 
+  Image as ImageIcon, 
+  Upload, 
+  Sparkles, 
+  Sliders, 
+  RotateCcw, 
+  CheckCircle2, 
+  Palette, 
+  LogOut,
+  AlertTriangle
 } from 'lucide-react';
 import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
 import { 
@@ -44,6 +45,8 @@ import {
 import { POSTGRES_SCHEMA_SQL } from '../data/supabaseSchema';
 import { safeConfirm } from '../utils/storage';
 import { BannerSlideEditor } from './BannerSlideEditor';
+import { DuplicateLinkManager } from './DuplicateLinkManager';
+import { detectDuplicateClusters } from '../utils/duplicateDetector';
 
 interface AdminDashboardProps {
   isOpen: boolean;
@@ -58,6 +61,8 @@ interface AdminDashboardProps {
   onAddNewLink: () => void;
   onEditLink: (item: MediaItem) => void;
   onDeleteLink: (itemId: string) => void;
+  onBatchUpdateItems?: (updatedItems: MediaItem[], deletedItemIds: string[]) => void;
+  onPreviewItem?: (item: MediaItem) => void;
   onTogglePin: (itemId: string) => void;
   onAddCategory: (category: Omit<Category, 'id'>) => void;
   onUpdateCategory?: (category: Category) => void;
@@ -83,6 +88,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddNewLink,
   onEditLink,
   onDeleteLink,
+  onBatchUpdateItems,
+  onPreviewItem,
   onTogglePin,
   onAddCategory,
   onUpdateCategory,
@@ -94,8 +101,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onResetSampleData,
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'links' | 'taxonomies' | 'visuals' | 'comments' | 'config' | 'schema'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'links' | 'duplicates' | 'taxonomies' | 'visuals' | 'comments' | 'config' | 'schema'>('overview');
   const [copiedSql, setCopiedSql] = useState(false);
+
+  // Scan duplicate clusters in the vault in real-time
+  const duplicateClusters = useMemo(() => {
+    return detectDuplicateClusters(items);
+  }, [items]);
 
   // Supabase Cloud State
   const [healthStatus, setHealthStatus] = useState<{
@@ -459,6 +471,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {[
             { id: 'overview', label: 'Metrics', icon: <Layers className="w-4 h-4" /> },
             { id: 'links', label: 'Manage Links', icon: <FileText className="w-4 h-4" /> },
+            { 
+              id: 'duplicates', 
+              label: 'ตรวจสอบลิงก์ซ้ำ (Duplicates)', 
+              icon: <Layers className="w-4 h-4 text-amber-400" />,
+              badge: duplicateClusters.length
+            },
             { id: 'taxonomies', label: 'Categories & Tags (หมวดหมู่ & แท็ก)', icon: <FolderPlus className="w-4 h-4" /> },
             { id: 'visuals', label: 'Visuals & Banners (รูปภาพ & แบนเนอร์)', icon: <Sparkles className="w-4 h-4 text-cyan-400" /> },
             { id: 'comments', label: 'Comments', icon: <MessageSquare className="w-4 h-4" /> },
@@ -478,6 +496,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 {tab.icon}
                 <span>{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -544,6 +567,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Duplicate Links Alert Card in Overview */}
+              {duplicateClusters.length > 0 && (
+                <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-amber-500/5 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                      <AlertTriangle className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-amber-300 flex items-center gap-2">
+                        <span>ตรวจพบคู่ลิงก์ซ้ำในระบบ {duplicateClusters.length} กลุ่ม</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          สามารถเคลียร์ได้ {duplicateClusters.reduce((a, c) => a + (c.items.length - 1), 0)} รายการ
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-300 mt-1">
+                        ระบบตรวจพบโพสต์ที่มี URL ปลายทางหรือ ID แพลตฟอร์มเดียวกัน สามารถเปิดหน้าตรวจสอบเพื่อรวมยอดไลก์และลบรายการซ้ำได้ทันที
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('duplicates')}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all shrink-0 cursor-pointer shadow-md shadow-amber-950/40 self-end sm:self-center"
+                  >
+                    เปิดตรวจสอบลิงก์ซ้ำ →
+                  </button>
+                </div>
+              )}
 
               {/* Quick Actions */}
               <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -672,6 +725,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB: DUPLICATE LINKS MANAGER */}
+          {activeTab === 'duplicates' && (
+            <DuplicateLinkManager
+              items={items}
+              categories={categories}
+              onBatchUpdateItems={onBatchUpdateItems || ((updated, deleted) => {
+                deleted.forEach((d) => onDeleteLink(d));
+                updated.forEach((u) => onEditLink(u));
+              })}
+              onEditItem={(item) => {
+                onClose();
+                onEditLink(item);
+              }}
+              onPreviewItem={(item) => {
+                onClose();
+                onPreviewItem?.(item);
+              }}
+            />
           )}
 
           {/* TAB 3: CATEGORIES & TAGS (CRUD with In-line Edit & Permanent Persistence) */}

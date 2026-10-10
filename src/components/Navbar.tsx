@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  LogOut
+  LogOut,
+  Layers
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -30,6 +31,8 @@ interface NavbarProps {
   onOpenAddLink: () => void;
   onOpenAdmin: () => void;
   onOpenRecent: () => void;
+  onOpenDuplicateChecker?: () => void;
+  duplicateCount?: number;
   recentCount: number;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -46,6 +49,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAddLink,
   onOpenAdmin,
   onOpenRecent,
+  onOpenDuplicateChecker,
+  duplicateCount = 0,
   recentCount,
   searchQuery,
   onSearchChange,
@@ -376,6 +381,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </button>
+
+          {/* Duplicate Links Inspector Button */}
+          {onOpenDuplicateChecker && (
+            <button
+              onClick={onOpenDuplicateChecker}
+              title="ตรวจสอบและจัดการลิงก์ซ้ำ"
+              className={`hidden sm:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target ${
+                duplicateCount > 0
+                  ? 'text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
+              }`}
+            >
+              <Layers className="w-4 h-4 text-cyan-400" />
+              <span className="hidden xl:inline">ตรวจลิงก์ซ้ำ</span>
+              {duplicateCount > 0 && (
+                <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-rose-500 text-white animate-pulse">
+                  {duplicateCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Admin Dashboard Trigger - ONLY for authenticated oterobot@gmail.com */}
           {isRealAdmin && (

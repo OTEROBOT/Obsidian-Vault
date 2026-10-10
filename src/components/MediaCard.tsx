@@ -180,12 +180,12 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
             : 'bg-slate-950'
         } ${
           viewMode === 'compact'
-            ? 'w-full sm:w-64 md:w-72 shrink-0 aspect-[16/10] sm:aspect-auto sm:min-h-[170px]'
+            ? 'w-full sm:w-60 md:w-72 shrink-0 aspect-[16/9] sm:aspect-auto sm:min-h-[160px]'
             : viewMode === 'large'
-            ? 'w-full aspect-[4/3] sm:aspect-[16/10] min-h-[280px] sm:min-h-[360px] md:min-h-[420px]'
+            ? 'w-full aspect-[16/10] sm:aspect-[16/9] min-h-[220px] sm:min-h-[320px] md:min-h-[380px]'
             : currentImageFit === 'contain'
-            ? 'w-full aspect-[4/3] sm:aspect-[16/10] min-h-[250px] sm:min-h-[290px]'
-            : 'w-full aspect-[4/3] sm:aspect-[16/11] min-h-[210px] sm:min-h-[250px]'
+            ? 'w-full aspect-[16/10] sm:aspect-[16/10] min-h-[185px] sm:min-h-[240px]'
+            : 'w-full aspect-[16/10] sm:aspect-[16/11] min-h-[175px] sm:min-h-[220px]'
         }`}
         onClick={() => onPreview(item)}
       >
@@ -351,7 +351,7 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
       </div>
 
       {/* Content Body */}
-      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+      <div className="p-3.5 sm:p-4.5 flex-1 flex flex-col justify-between space-y-2.5 sm:space-y-3">
         
         <div>
           {/* Domain & Category Row */}

@@ -104,11 +104,13 @@ import { ScrollNavigation } from './components/ScrollNavigation';
 import { useTranslation } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 import { updateBrowserFavicon } from './utils/favicon';
+import { detectDuplicateClusters } from './utils/duplicateDetector';
 
 // Dynamic Code Splitting for heavy dialogs & modals to ensure ultra-fast initial page load
 const EmbeddedMediaViewer = React.lazy(() => import('./components/EmbeddedMediaViewer').then(m => ({ default: m.EmbeddedMediaViewer })));
 const AddEditLinkModal = React.lazy(() => import('./components/AddEditLinkModal').then(m => ({ default: m.AddEditLinkModal })));
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const DuplicateLinkManager = React.lazy(() => import('./components/DuplicateLinkManager').then(m => ({ default: m.DuplicateLinkManager })));
 const RecentlyViewedDrawer = React.lazy(() => import('./components/RecentlyViewedDrawer').then(m => ({ default: m.RecentlyViewedDrawer })));
 const AuthModal = React.lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
 const UserProfileModal = React.lazy(() => import('./components/UserProfileModal').then(m => ({ default: m.UserProfileModal })));
@@ -268,6 +270,12 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [returnToProfile, setReturnToProfile] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDuplicateCheckerOpen, setIsDuplicateCheckerOpen] = useState(false);
+
+  // Real-time scan of duplicate link clusters in vault
+  const duplicateClusters = useMemo(() => {
+    return detectDuplicateClusters(items);
+  }, [items]);
 
   // Floating Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1061,6 +1069,43 @@ export default function App() {
     showToast(t.toasts.entryRemoved);
   }, [isRealAdmin, t.toasts.permissionDenied, t.toasts.entryRemoved]);
 
+  const handleBatchUpdateItems = useCallback((updatedItems: MediaItem[], deletedItemIds: string[]) => {
+    const deletedSet = new Set(deletedItemIds);
+    deletedItemIds.forEach((id) => markItemAsDeleted(id));
+
+    setItems((prevItems) => {
+      // 1. Remove deleted items
+      let nextItems = prevItems.filter((it) => !deletedSet.has(it.id));
+
+      // 2. Update master / updated items
+      const updatedMap = new Map(updatedItems.map((u) => [u.id, u]));
+      nextItems = nextItems.map((it) => updatedMap.get(it.id) || it);
+
+      saveItems(nextItems);
+      return nextItems;
+    });
+
+    // Background sync to Supabase
+    deletedItemIds.forEach((id) => {
+      deleteItemFromSupabase(id).catch((e) => console.warn('Supabase batch delete error:', e));
+    });
+    updatedItems.forEach((item) => {
+      saveItemToSupabase(item).catch((e) => console.warn('Supabase batch update error:', e));
+    });
+
+    // If currently previewing an item that got deleted, update or close preview
+    setPreviewItem((prev) => {
+      if (!prev) return null;
+      if (deletedSet.has(prev.id)) {
+        return updatedItems[0] || null;
+      }
+      const updated = updatedItems.find((u) => u.id === prev.id);
+      return updated || prev;
+    });
+
+    showToast('จัดการและหลอมรวมข้อมูลลิงก์ซ้ำเรียบร้อยแล้ว');
+  }, []);
+
   const handleSaveLink = (data: Partial<MediaItem>) => {
     if (!isRealAdmin) {
       showToast(`${t.toasts.permissionDenied} (${ADMIN_EMAIL})`);
@@ -1384,6 +1429,8 @@ export default function App() {
           }
         }}
         onOpenRecent={() => setIsRecentOpen(true)}
+        onOpenDuplicateChecker={() => setIsDuplicateCheckerOpen(true)}
+        duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
         searchQuery={filters.query}
         onSearchChange={(q) => setFilters({ ...filters, query: q })}
@@ -1393,7 +1440,7 @@ export default function App() {
       />
 
       {/* Main Container Area - Responsive for Mobile, Tablet, Laptop, Desktop, and Smart TVs */}
-      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-24 lg:pb-8 overflow-x-hidden">
+      <main className="flex-1 w-full max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2000px] mx-auto px-2.5 sm:px-6 lg:px-8 py-3.5 sm:py-6 space-y-3.5 sm:space-y-6 pb-28 sm:pb-24 lg:pb-8 overflow-x-hidden">
         
         {/* Top Hero Banner Slider with Free Mouse Drag Repositioning & Smooth Transitions */}
         {config.showBanner !== false && (
@@ -1535,10 +1582,10 @@ export default function App() {
           <>
             <div className={
               viewMode === 'large'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-3 gap-6 sm:gap-8'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-3 gap-4 sm:gap-8'
                 : viewMode === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-5 sm:gap-6'
-                : 'space-y-4'
+                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-3.5 sm:gap-6'
+                : 'space-y-3 sm:space-y-4'
             }>
               {renderedItems.map((item) => {
                 const category = categories.find((c) => c.id === item.categoryId);
@@ -1655,6 +1702,8 @@ export default function App() {
           }
         }}
         onOpenRecent={() => setIsRecentOpen(true)}
+        onOpenDuplicateChecker={() => setIsDuplicateCheckerOpen(true)}
+        duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
       />
 
@@ -1663,10 +1712,12 @@ export default function App() {
         {previewItem && (
           <EmbeddedMediaViewer
             item={previewItem}
+            allItems={items}
             user={user}
             comments={comments.filter((c) => c.itemId === previewItem.id)}
             isLiked={userLikedItemIds.has(previewItem.id)}
             isBookmarked={userBookmarkedItemIds.has(previewItem.id)}
+            onSelectRelatedItem={(it) => handleOpenPreview(it)}
             onClose={() => {
               setPreviewItem(null);
               saveReadingPost(null);
@@ -1724,6 +1775,8 @@ export default function App() {
               setIsAddEditOpen(true);
             }}
             onDeleteLink={handleDeleteItem}
+            onBatchUpdateItems={handleBatchUpdateItems}
+            onPreviewItem={handleOpenPreview}
             onTogglePin={handleTogglePin}
             onAddCategory={handleAddCategory}
             onUpdateCategory={handleUpdateCategory}
@@ -1735,6 +1788,33 @@ export default function App() {
             onResetSampleData={handleResetSampleData}
             onLogout={handleLogout}
           />
+        )}
+
+        {/* Dedicated Duplicate Links Inspector & Auto-Resolution Modal */}
+        {isDuplicateCheckerOpen && (
+          <div 
+            className="fixed inset-0 z-[65] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md overflow-y-auto"
+            onClick={() => setIsDuplicateCheckerOpen(false)}
+          >
+            <div 
+              className="relative w-full max-w-6xl max-h-[92vh] overflow-y-auto bg-[#090c15] border border-cyan-500/30 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <React.Suspense fallback={<div className="p-12 text-center text-cyan-400 font-mono">กำลังโหลดระบบตรวจสอบลิงก์ซ้ำ...</div>}>
+                <DuplicateLinkManager
+                  items={items}
+                  categories={categories}
+                  onBatchUpdateItems={handleBatchUpdateItems}
+                  onEditItem={(it) => {
+                    setEditingItem(it);
+                    setIsAddEditOpen(true);
+                  }}
+                  onPreviewItem={handleOpenPreview}
+                  onClose={() => setIsDuplicateCheckerOpen(false)}
+                />
+              </React.Suspense>
+            </div>
+          </div>
         )}
 
         {/* Recently Viewed Links Drawer */}
