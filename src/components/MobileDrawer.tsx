@@ -13,7 +13,8 @@ import {
   Laptop,
   ExternalLink,
   Check,
-  Layers
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -33,6 +34,9 @@ interface MobileDrawerProps {
   onOpenRecent: () => void;
   onOpenDuplicateChecker?: () => void;
   duplicateCount?: number;
+  onOpenVpnGuide?: () => void;
+  onOpenAiCategory?: () => void;
+  misclassifiedCategoryCount?: number;
   recentCount: number;
 }
 
@@ -48,6 +52,9 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onOpenRecent,
   onOpenDuplicateChecker,
   duplicateCount = 0,
+  onOpenVpnGuide,
+  onOpenAiCategory,
+  misclassifiedCategoryCount = 0,
   recentCount,
 }) => {
   const { t, language, setLanguage, languages } = useTranslation();
@@ -210,6 +217,54 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                     ไม่พบซ้ำ
                   </span>
                 )}
+              </button>
+            )}
+
+            {/* AI Auto-Categorize Trigger */}
+            {onOpenAiCategory && (
+              <button
+                onClick={() => {
+                  onOpenAiCategory();
+                  onClose();
+                }}
+                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all touch-target cursor-pointer ${
+                  misclassifiedCategoryCount > 0
+                    ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
+                    : 'bg-white/5 text-slate-300 hover:text-white border-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-semibold">AI จัดหมวดหมู่อัตโนมัติ</span>
+                </div>
+                {misclassifiedCategoryCount > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-400 text-slate-950 animate-pulse">
+                    {misclassifiedCategoryCount} รายการผิดหมวด
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    ถูกต้องทั้งหมด
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Japan VPN Notice Trigger */}
+            {onOpenVpnGuide && (
+              <button
+                onClick={() => {
+                  onOpenVpnGuide();
+                  onClose();
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 transition-all touch-target cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-base select-none">🇯🇵</span>
+                  <span className="text-xs font-semibold">คู่มือ & คำแนะนำ VPN JP</span>
+                </div>
+                <span className="text-[10px] font-mono font-bold text-rose-300 bg-rose-500/20 px-2 py-0.5 rounded-full border border-rose-500/30">
+                  ข้อควรรู้
+                </span>
               </button>
             )}
 

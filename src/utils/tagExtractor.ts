@@ -98,6 +98,21 @@ export function extractSmartTags(
         detectedTags.add(namePart.charAt(0).toUpperCase() + namePart.slice(1));
       }
     }
+
+    // Auto-detect Japan platforms that typically require Japan VPN
+    if (
+      host.endsWith('.jp') ||
+      host.includes('dmm.') ||
+      host.includes('fanza.') ||
+      host.includes('dlsite.') ||
+      host.includes('tver.jp') ||
+      host.includes('abema.tv') ||
+      host.includes('nicovideo.jp') ||
+      host.includes('radiko.jp') ||
+      host.includes('bookwalker.jp')
+    ) {
+      detectedTags.add('VPN JP');
+    }
   }
 
   if (publisher) {
@@ -247,17 +262,29 @@ export function detectSmartCategory(
   };
 
   const nameOrSlugMatches = (c: Category, keywords: string[]): boolean => {
-    const name = c.name.toLowerCase();
-    const slug = (c.slug || '').toLowerCase();
-    return keywords.some((kw) => name.includes(kw) || slug.includes(kw));
+    const name = (c.name || '').toLowerCase().trim();
+    const slug = (c.slug || '').toLowerCase().trim();
+    const nameTokens = name.split(/[\s\-_/(),|&.]+/).filter(Boolean);
+    const slugTokens = slug.split(/[\s\-_/(),|&.]+/).filter(Boolean);
+
+    return keywords.some((kw) => {
+      const k = kw.toLowerCase().trim();
+      if (k.length <= 2) {
+        // Strict boundary check: avoid single letter 'x' matching 'fanbox' or 'pixiv'
+        return name === k || slug === k || nameTokens.includes(k) || slugTokens.includes(k);
+      }
+      return name.includes(k) || slug.includes(k) || nameTokens.some((t) => t.includes(k));
+    });
   };
 
   // --- Step 1: Direct Domain / Platform Matches ---
   if (host) {
     // 1.1 X (Twitter)
     if (host.includes('twitter.com') || host.includes('x.com')) {
-      const match = findCategory((c) => nameOrSlugMatches(c, ['x', 'twitter']));
+      const match = findCategory((c) => nameOrSlugMatches(c, ['x', 'twitter', 'social', 'sns', 'ทวิตเตอร์', 'โซเชียล']));
       if (match) return match;
+      // Guard against false keyword match: An X/Twitter link must NEVER be classified as Fanbox/Patreon!
+      return null;
     }
 
     // 1.2 Pixiv
@@ -355,8 +382,8 @@ export function detectSmartCategory(
     if (match) return match;
   }
 
-  // 2.3 Fanbox
-  if (fullText.includes('fanbox')) {
+  // 2.3 Fanbox (only if not an X/Twitter, YouTube or other distinct platform link)
+  if (fullText.includes('fanbox') && !host.includes('twitter.com') && !host.includes('x.com') && !host.includes('youtube.com')) {
     const match = findCategory((c) => nameOrSlugMatches(c, ['fanbox']));
     if (match) return match;
   }

@@ -27,6 +27,7 @@ import { getDomainFromUrl, safeConfirm } from '../utils/storage';
 import { ADMIN_EMAIL } from '../utils/supabase';
 import { isPixiv, isTwitterOrX, getSafeImageUrl, getPixivIllustId } from '../utils/mediaProxy';
 import { decodeHtmlEntities } from '../utils/text';
+import { checkRequiresJapanVpn } from '../utils/vpnDetector';
 import { OptimizedImage } from './OptimizedImage';
 
 interface MediaCardProps {
@@ -81,6 +82,7 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
   const displayId = item.itemNumber || 1;
   const cleanTitle = decodeHtmlEntities(item.title);
   const cleanDescription = decodeHtmlEntities(item.description);
+  const vpnInfo = checkRequiresJapanVpn(item);
 
   const handleToggleFit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -235,6 +237,16 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
               <span>{t.card.pinned}</span>
             </div>
           )}
+
+          {vpnInfo.requiresVpn && (
+            <div 
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-950/90 text-rose-300 border border-red-500/40 text-[10px] font-mono font-bold shadow-md card-badge select-none"
+              title="เว็บไซต์นี้อาจต้องใช้ VPN ประเทศญี่ปุ่น (VPN JP) เพื่อเปิดดูเนื้อหา"
+            >
+              <span>🇯🇵</span>
+              <span>VPN JP</span>
+            </div>
+          )}
         </div>
 
         {/* Top-Right Quick Overlay Controls: Image Fit Toggle & Admin Menu */}
@@ -373,14 +385,25 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
               </span>
             </div>
 
-            {category && (
-              <span 
-                className="text-[10px] px-2 py-0.5 rounded-full border shrink-0"
-                style={{ borderColor: `${category.color}40`, color: category.color, backgroundColor: `${category.color}15` }}
-              >
-                {category.name}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {vpnInfo.requiresVpn && (
+                <span 
+                  className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 flex items-center gap-1 shrink-0 select-none"
+                  title="เว็บไซต์นี้อาจต้องใช้ VPN ประเทศญี่ปุ่น (VPN JP) เพื่อดูเนื้อหา"
+                >
+                  <span>🇯🇵</span>
+                  <span>VPN JP</span>
+                </span>
+              )}
+              {category && (
+                <span 
+                  className="text-[10px] px-2 py-0.5 rounded-full border shrink-0"
+                  style={{ borderColor: `${category.color}40`, color: category.color, backgroundColor: `${category.color}15` }}
+                >
+                  {category.name}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Title */}
@@ -527,11 +550,17 @@ const MediaCardComponent: React.FC<MediaCardProps> = ({
                 e.stopPropagation();
                 onRecordView?.(item);
               }}
-              className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 border border-white/5 hover:border-white/15 transition-colors touch-target cursor-pointer"
-              title={t.card.source}
+              className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 border border-white/5 hover:border-white/15 transition-colors touch-target cursor-pointer relative"
+              title={vpnInfo.requiresVpn ? 'เปิดลิงก์ต้นทาง (หากเปิดไม่ได้ อาจต้องใช้ VPN JP)' : t.card.source}
               aria-label="Source"
             >
               <ExternalLink className="w-3.5 h-3.5" />
+              {vpnInfo.requiresVpn && (
+                <span 
+                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 border border-slate-900 animate-pulse" 
+                  title="อาจต้องใช้ VPN JP"
+                />
+              )}
             </a>
 
             {/* Embedded Preview Button */}

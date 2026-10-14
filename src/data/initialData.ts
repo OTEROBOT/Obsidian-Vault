@@ -18,6 +18,7 @@ export const INITIAL_TAGS: Tag[] = [
   { id: 'tag-6', name: 'OpenSource', color: '#34d399' },
   { id: 'tag-7', name: 'UI/UX', color: '#fbbf24' },
   { id: 'tag-8', name: 'Architecture', color: '#60a5fa' },
+  { id: 'tag-vpn', name: 'VPN JP', color: '#f43f5e' },
 ];
 
 export const INITIAL_ITEMS: MediaItem[] = [
@@ -193,7 +194,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
     thumbnailUrl: '/api/pixiv-image?url=https%3A%2F%2Fi.pximg.net%2Fimg-master%2Fimg%2F2024%2F01%2F30%2F00%2F03%2F06%2F115598114_p0_master1200.jpg',
     embedType: 'image',
     categoryId: 'cat-cyber',
-    tags: ['Pixiv', 'Illustration', 'Artwork'],
+    tags: ['Pixiv', 'Illustration', 'Artwork', 'VPN JP'],
     siteName: 'Pixiv (하우디 Howdii)',
     favicon: 'https://www.pixiv.net/favicon.ico',
     viewsCount: 4210,
@@ -201,6 +202,7 @@ export const INITIAL_ITEMS: MediaItem[] = [
     createdAt: '2026-03-11T12:00:00Z',
     updatedAt: '2026-03-11T12:00:00Z',
     isPinned: true,
+    requiresJapanVpn: true,
     source: 'url',
   },
   {
@@ -221,6 +223,27 @@ export const INITIAL_ITEMS: MediaItem[] = [
     createdAt: '2026-03-12T10:00:00Z',
     updatedAt: '2026-03-12T10:00:00Z',
     isPinned: true,
+    source: 'url',
+  },
+  {
+    id: 'vault-item-tver',
+    itemNumber: 11,
+    title: 'TVer (ティーバー) - Japanese Commercial TV Official Free Streaming Portal',
+    description: 'แพลตฟอร์มรับชมรายการโทรทัศน์ ซีรีส์ และอนิเมะฟรีอย่างเป็นทางการของญี่ปุ่น (จำเป็นต้องใช้ VPN ประเทศญี่ปุ่น / VPN JP เนื่องจากลิขสิทธิ์จำกัดเฉพาะในญี่ปุ่น)',
+    url: 'https://tver.jp/',
+    mediaType: 'web',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?auto=format&fit=crop&w=1200&q=80',
+    embedType: 'iframe',
+    categoryId: 'cat-video',
+    tags: ['VPN JP', 'Japan', 'TVer', 'Streaming'],
+    siteName: 'TVer (Japan)',
+    favicon: 'https://tver.jp/favicon.ico',
+    viewsCount: 5420,
+    likesCount: 512,
+    createdAt: '2026-03-13T14:00:00Z',
+    updatedAt: '2026-03-13T14:00:00Z',
+    isPinned: false,
+    requiresJapanVpn: true,
     source: 'url',
   }
 ];

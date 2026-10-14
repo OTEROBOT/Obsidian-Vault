@@ -26,6 +26,8 @@ import { extractSmartTags, detectSmartCategory } from '../utils/tagExtractor';
 import { parseUrlSemantics } from '../utils/urlParser';
 import { scrapePageMetadata } from '../utils/webImageScraper';
 import { decodeHtmlEntities } from '../utils/text';
+import { checkRequiresJapanVpn } from '../utils/vpnDetector';
+import { classifyItemCategory } from '../utils/aiCategoryClassifier';
 
 interface AddEditLinkModalProps {
   initialItem?: MediaItem | null;
@@ -59,6 +61,10 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
   const [autoDetectedCategoryName, setAutoDetectedCategoryName] = useState<string | null>(null);
   const [itemTags, setItemTags] = useState<string[]>(initialItem?.tags || []);
   const [isPinned, setIsPinned] = useState(initialItem?.isPinned || false);
+  const [requiresJapanVpn, setRequiresJapanVpn] = useState<boolean>(() => {
+    if (initialItem?.requiresJapanVpn !== undefined) return initialItem.requiresJapanVpn;
+    return checkRequiresJapanVpn(initialItem).requiresVpn;
+  });
 
   // Webpage Image Discovery states
   const [discoveredImages, setDiscoveredImages] = useState<string[]>([]);
@@ -123,6 +129,43 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
     applySmartTags(url, title, description);
   };
 
+  // Helper to build a valid MediaItem mock for AI classification
+  const buildMockItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
+    id: initialItem?.id || 'temp',
+    title: overrides.title ?? title ?? '',
+    description: overrides.description ?? description ?? '',
+    url: overrides.url ?? url ?? '',
+    mediaType: overrides.mediaType ?? mediaType ?? 'web',
+    thumbnailUrl: overrides.thumbnailUrl ?? thumbnailUrl ?? '',
+    embedType: overrides.embedType ?? initialItem?.embedType ?? 'iframe',
+    categoryId: overrides.categoryId ?? categoryId ?? '',
+    tags: overrides.tags ?? itemTags ?? [],
+    source: 'url',
+    viewsCount: initialItem?.viewsCount || 0,
+    likesCount: initialItem?.likesCount || 0,
+    createdAt: initialItem?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  // Dedicated helper to trigger smart AI auto-categorization based on domain hierarchy
+  const handleAutoClassifyCategory = () => {
+    if (!url || !url.trim()) return;
+    const cleanUrl = url.trim();
+    const mockItem = buildMockItem({ url: cleanUrl });
+
+    const audit = classifyItemCategory(mockItem, categories);
+    if (audit.recommendedCategory) {
+      setCategoryId(audit.recommendedCategory.id);
+      setAutoDetectedCategoryName(audit.recommendedCategory.name);
+    } else {
+      const fallback = detectSmartCategory(cleanUrl, title, description, categories);
+      if (fallback) {
+        setCategoryId(fallback.id);
+        setAutoDetectedCategoryName(fallback.name);
+      }
+    }
+  };
+
   // Instant semantic pre-fill when typing or pasting URL
   const handleUrlInputChange = (inputVal: string) => {
     setUrl(inputVal);
@@ -136,14 +179,40 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
         if (!thumbnailUrl) setThumbnailUrl(sem.fallbackImage);
         if (sem.mediaType) setMediaType(sem.mediaType);
 
-        const matchedCategory = detectSmartCategory(clean, sem.title, sem.description, categories);
-        if (matchedCategory) {
-          setCategoryId(matchedCategory.id);
-          setAutoDetectedCategoryName(matchedCategory.name);
+        const mockItem = buildMockItem({
+          title: sem.title || '',
+          description: sem.description || '',
+          url: clean,
+          mediaType: sem.mediaType || 'web',
+        });
+
+        const audit = classifyItemCategory(mockItem, categories);
+        if (audit.recommendedCategory) {
+          setCategoryId(audit.recommendedCategory.id);
+          setAutoDetectedCategoryName(audit.recommendedCategory.name);
+        } else {
+          const matchedCategory = detectSmartCategory(clean, sem.title, sem.description, categories);
+          if (matchedCategory) {
+            setCategoryId(matchedCategory.id);
+            setAutoDetectedCategoryName(matchedCategory.name);
+          }
         }
+
         if (autoGenerateTags && sem.suggestedTags.length > 0) {
           applySmartTags(clean, sem.title, sem.description, sem.siteName);
         }
+      }
+
+      // Automatically detect if URL points to a Japan geo-restricted service
+      const vpnCheck = checkRequiresJapanVpn(clean);
+      if (vpnCheck.requiresVpn) {
+        setRequiresJapanVpn(true);
+        setItemTags((prev) => {
+          if (!prev.includes('VPN JP')) {
+            return [...prev, 'VPN JP'];
+          }
+          return prev;
+        });
       }
     }
   };
@@ -229,11 +298,23 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
         setThumbnailUrl(sem.fallbackImage);
       }
 
-      // Auto-detect category
-      const matchedCategory = detectSmartCategory(cleanUrl, finalTitle, finalDesc, categories);
-      if (matchedCategory) {
-        setCategoryId(matchedCategory.id);
-        setAutoDetectedCategoryName(matchedCategory.name);
+      // Auto-detect category with domain-first classification (e.g. X stays in X, never Fanbox)
+      const scrapeMock = buildMockItem({
+        title: finalTitle,
+        description: finalDesc,
+        url: cleanUrl,
+        mediaType,
+      });
+      const audit = classifyItemCategory(scrapeMock, categories);
+      if (audit.recommendedCategory) {
+        setCategoryId(audit.recommendedCategory.id);
+        setAutoDetectedCategoryName(audit.recommendedCategory.name);
+      } else {
+        const matchedCategory = detectSmartCategory(cleanUrl, finalTitle, finalDesc, categories);
+        if (matchedCategory) {
+          setCategoryId(matchedCategory.id);
+          setAutoDetectedCategoryName(matchedCategory.name);
+        }
       }
 
       // Auto-extract tags
@@ -246,10 +327,22 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
     } catch (err: any) {
       console.warn('Scraping error:', err);
       // Fallback already populated by parseUrlSemantics
-      const matchedCategory = detectSmartCategory(cleanUrl, sem.title, sem.description, categories);
-      if (matchedCategory) {
-        setCategoryId(matchedCategory.id);
-        setAutoDetectedCategoryName(matchedCategory.name);
+      const fallbackMock = buildMockItem({
+        title: sem.title,
+        description: sem.description,
+        url: cleanUrl,
+        mediaType,
+      });
+      const fbAudit = classifyItemCategory(fallbackMock, categories);
+      if (fbAudit.recommendedCategory) {
+        setCategoryId(fbAudit.recommendedCategory.id);
+        setAutoDetectedCategoryName(fbAudit.recommendedCategory.name);
+      } else {
+        const matchedCategory = detectSmartCategory(cleanUrl, sem.title, sem.description, categories);
+        if (matchedCategory) {
+          setCategoryId(matchedCategory.id);
+          setAutoDetectedCategoryName(matchedCategory.name);
+        }
       }
       if (autoGenerateTags) {
         applySmartTags(cleanUrl, sem.title, sem.description, sem.siteName);
@@ -414,6 +507,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
       categoryId,
       tags: itemTags,
       isPinned,
+      requiresJapanVpn,
       source: activeTab,
       fileName: activeTab === 'upload' ? fileName : undefined,
       fileSize: activeTab === 'upload' ? fileSize : undefined,
@@ -780,13 +874,26 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-slate-300">Category</label>
-                {autoDetectedCategoryName && (
-                  <span className="text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    Auto: {autoDetectedCategoryName}
-                  </span>
-                )}
+                <label className="text-xs font-medium text-slate-300">Category (หมวดหมู่)</label>
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {autoDetectedCategoryName && (
+                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      Auto: {autoDetectedCategoryName}
+                    </span>
+                  )}
+                  {url && url.trim().length > 3 && (
+                    <button
+                      type="button"
+                      onClick={handleAutoClassifyCategory}
+                      className="text-[10px] text-cyan-300 hover:text-white bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-sm"
+                      title="ให้ AI ตรวจสอบโดเมนลิงก์แท้จริงและจัดหมวดหมู่อัตโนมัติ (เช่น ลิงก์ X เข้าหมวดหมู่ X เสมอ)"
+                    >
+                      <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+                      <span>AI จัดหมวดหมู่ตามลิงก์</span>
+                    </button>
+                  )}
+                </div>
               </div>
               <select
                 value={categoryId}
@@ -804,7 +911,7 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
               </select>
             </div>
 
-            <div className="pt-5 flex items-center gap-2">
+            <div className="pt-5 flex items-center gap-4 flex-wrap">
               <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-300">
                 <input
                   type="checkbox"
@@ -814,6 +921,26 @@ export const AddEditLinkModal: React.FC<AddEditLinkModalProps> = ({
                 />
                 <Pin className="w-3.5 h-3.5 text-amber-400" />
                 <span>Pin to Top of Vault</span>
+              </label>
+
+              <label 
+                className="flex items-center gap-2 cursor-pointer select-none text-xs text-rose-300 hover:text-rose-200 transition-colors"
+                title="ทำเครื่องหมายหากเว็บไซต์นี้จำกัดการเข้าถึงเฉพาะในญี่ปุ่น (เช่น สตรีมมิ่ง, Pixiv, DMM, TVer ฯลฯ)"
+              >
+                <input
+                  type="checkbox"
+                  checked={requiresJapanVpn}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setRequiresJapanVpn(checked);
+                    if (checked && !itemTags.includes('VPN JP')) {
+                      setItemTags((prev) => [...prev, 'VPN JP']);
+                    }
+                  }}
+                  className="w-4 h-4 rounded bg-slate-900 border-rose-500/30 text-rose-500 focus:ring-rose-500/40"
+                />
+                <span className="text-sm select-none">🇯🇵</span>
+                <span className="font-semibold">ต้องใช้ VPN ญี่ปุ่น (VPN JP)</span>
               </label>
             </div>
           </div>

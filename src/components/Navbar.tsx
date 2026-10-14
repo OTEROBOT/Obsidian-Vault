@@ -15,7 +15,8 @@ import {
   X,
   ChevronDown,
   LogOut,
-  Layers
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -33,6 +34,9 @@ interface NavbarProps {
   onOpenRecent: () => void;
   onOpenDuplicateChecker?: () => void;
   duplicateCount?: number;
+  onOpenVpnGuide?: () => void;
+  onOpenAiCategory?: () => void;
+  misclassifiedCategoryCount?: number;
   recentCount: number;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -51,6 +55,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenRecent,
   onOpenDuplicateChecker,
   duplicateCount = 0,
+  onOpenVpnGuide,
+  onOpenAiCategory,
+  misclassifiedCategoryCount = 0,
   recentCount,
   searchQuery,
   onSearchChange,
@@ -400,6 +407,39 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {duplicateCount}
                 </span>
               )}
+            </button>
+          )}
+
+          {/* AI Auto-Categorize Button */}
+          {onOpenAiCategory && (
+            <button
+              onClick={onOpenAiCategory}
+              title="AI จัดหมวดหมู่อัตโนมัติ: ตรวจสอบและแก้ไขหมวดหมู่ให้ตรงกับลิงก์ต้นทางแท้จริง (เช่น X -> หมวดหมู่ X)"
+              className={`hidden sm:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target ${
+                misclassifiedCategoryCount > 0
+                  ? 'text-cyan-300 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <span className="hidden xl:inline">AI จัดหมวดหมู่</span>
+              {misclassifiedCategoryCount > 0 && (
+                <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-cyan-400 text-slate-950 animate-pulse">
+                  {misclassifiedCategoryCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Japan VPN Guide & Notice Trigger */}
+          {onOpenVpnGuide && (
+            <button
+              onClick={onOpenVpnGuide}
+              title="คำแนะนำ: ทำไมบางลิงก์เปิดไม่ได้? (VPN JP)"
+              className="hidden lg:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-rose-300 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 hover:border-rose-500/40 transition-all active:scale-95 cursor-pointer touch-target shadow-sm"
+            >
+              <span className="text-sm select-none">🇯🇵</span>
+              <span className="hidden xl:inline">คู่มือ VPN JP</span>
             </button>
           )}
 

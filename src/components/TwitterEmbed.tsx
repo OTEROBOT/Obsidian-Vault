@@ -202,7 +202,7 @@ export const TwitterEmbed: React.FC<TwitterEmbedProps> = ({
               {error && (
                 <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span>{error} - คุณสามารถเปิดดูบนเว็บไซต์หรือแอป 𝕏 ได้โดยตรง</span>
+                  <span>{error} - คุณสามารถเปิดดูบนเว็บไซต์หรือแอป 𝕏 ได้โดยตรง (หากโพสต์ล็อกโซน อาจต้องเชื่อมต่อ VPN ญี่ปุ่น / VPN JP)</span>
                 </div>
               )}
             </div>

@@ -35,6 +35,7 @@ export interface MediaItem {
   source: 'url' | 'upload';
   fileName?: string;
   fileSize?: string;
+  requiresJapanVpn?: boolean; // Flag if link requires Japan VPN to view
 }
 
 export interface Category {
@@ -82,6 +83,7 @@ export interface SearchFilters {
   mediaType: 'all' | MediaType;
   sortBy: 'newest' | 'oldest' | 'views' | 'likes' | 'title';
   pinnedOnly: boolean;
+  vpnJpOnly?: boolean;
 }
 
 export interface ScrapedMetadata {

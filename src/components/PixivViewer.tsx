@@ -385,6 +385,10 @@ export const PixivViewer: React.FC<PixivViewerProps> = ({
                   <Sparkles className="w-3 h-3 text-purple-400" />
                   <span>Media Proxy Active (Bypass 403)</span>
                 </span>
+                <span className="px-2.5 py-1 rounded-lg bg-red-500/10 text-rose-300 border border-red-500/20 font-mono text-[11px] flex items-center gap-1">
+                  <span>🇯🇵</span>
+                  <span>หากเปิดบนเว็บไม่ได้ อาจต้องใช้ VPN JP</span>
+                </span>
               </div>
             </div>
           </div>

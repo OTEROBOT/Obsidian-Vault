@@ -63,6 +63,7 @@ interface AdminDashboardProps {
   onDeleteLink: (itemId: string) => void;
   onBatchUpdateItems?: (updatedItems: MediaItem[], deletedItemIds: string[]) => void;
   onPreviewItem?: (item: MediaItem) => void;
+  onOpenAiCategorizer?: () => void;
   onTogglePin: (itemId: string) => void;
   onAddCategory: (category: Omit<Category, 'id'>) => void;
   onUpdateCategory?: (category: Category) => void;
@@ -90,6 +91,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteLink,
   onBatchUpdateItems,
   onPreviewItem,
+  onOpenAiCategorizer,
   onTogglePin,
   onAddCategory,
   onUpdateCategory,

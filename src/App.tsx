@@ -105,6 +105,7 @@ import { useTranslation } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 import { updateBrowserFavicon } from './utils/favicon';
 import { detectDuplicateClusters } from './utils/duplicateDetector';
+import { auditVaultCategories } from './utils/aiCategoryClassifier';
 
 // Dynamic Code Splitting for heavy dialogs & modals to ensure ultra-fast initial page load
 const EmbeddedMediaViewer = React.lazy(() => import('./components/EmbeddedMediaViewer').then(m => ({ default: m.EmbeddedMediaViewer })));
@@ -114,6 +115,8 @@ const DuplicateLinkManager = React.lazy(() => import('./components/DuplicateLink
 const RecentlyViewedDrawer = React.lazy(() => import('./components/RecentlyViewedDrawer').then(m => ({ default: m.RecentlyViewedDrawer })));
 const AuthModal = React.lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
 const UserProfileModal = React.lazy(() => import('./components/UserProfileModal').then(m => ({ default: m.UserProfileModal })));
+const VpnGuideModal = React.lazy(() => import('./components/VpnGuideModal').then(m => ({ default: m.VpnGuideModal })));
+const AiCategoryModal = React.lazy(() => import('./components/AiCategoryModal').then(m => ({ default: m.AiCategoryModal })));
 
 export default function App() {
   const { t } = useTranslation();
@@ -271,11 +274,18 @@ export default function App() {
   const [returnToProfile, setReturnToProfile] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDuplicateCheckerOpen, setIsDuplicateCheckerOpen] = useState(false);
+  const [isVpnGuideOpen, setIsVpnGuideOpen] = useState(false);
+  const [isAiCategoryModalOpen, setIsAiCategoryModalOpen] = useState(false);
 
   // Real-time scan of duplicate link clusters in vault
   const duplicateClusters = useMemo(() => {
     return detectDuplicateClusters(items);
   }, [items]);
+
+  // Real-time scan of category health & misclassified links
+  const categoryHealthReport = useMemo(() => {
+    return auditVaultCategories(items, categories);
+  }, [items, categories]);
 
   // Floating Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -283,6 +293,14 @@ export default function App() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleFilterVpnLinks = () => {
+    setFilters((prev) => ({
+      ...prev,
+      query: 'VPN JP',
+    }));
+    showToast('🔍 กำหนดการค้นหาสำหรับลิงก์ที่เกี่ยวข้องกับ VPN JP');
   };
 
   // Restore post when returning from another tab, Facebook, or other apps
@@ -1430,6 +1448,9 @@ export default function App() {
         }}
         onOpenRecent={() => setIsRecentOpen(true)}
         onOpenDuplicateChecker={() => setIsDuplicateCheckerOpen(true)}
+        onOpenVpnGuide={() => setIsVpnGuideOpen(true)}
+        onOpenAiCategory={() => setIsAiCategoryModalOpen(true)}
+        misclassifiedCategoryCount={categoryHealthReport.misclassifiedCount}
         duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
         searchQuery={filters.query}
@@ -1703,6 +1724,9 @@ export default function App() {
         }}
         onOpenRecent={() => setIsRecentOpen(true)}
         onOpenDuplicateChecker={() => setIsDuplicateCheckerOpen(true)}
+        onOpenVpnGuide={() => setIsVpnGuideOpen(true)}
+        onOpenAiCategory={() => setIsAiCategoryModalOpen(true)}
+        misclassifiedCategoryCount={categoryHealthReport.misclassifiedCount}
         duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
       />
@@ -1815,6 +1839,29 @@ export default function App() {
               </React.Suspense>
             </div>
           </div>
+        )}
+
+        {/* Japan VPN Guide & Advisory Modal */}
+        {isVpnGuideOpen && (
+          <VpnGuideModal
+            isOpen={isVpnGuideOpen}
+            onClose={() => setIsVpnGuideOpen(false)}
+            onFilterVpnLinks={handleFilterVpnLinks}
+          />
+        )}
+
+        {/* AI Auto-Categorize Modal (Audit & Fix Misclassified Links) */}
+        {isAiCategoryModalOpen && (
+          <React.Suspense fallback={null}>
+            <AiCategoryModal
+              isOpen={isAiCategoryModalOpen}
+              onClose={() => setIsAiCategoryModalOpen(false)}
+              items={items}
+              categories={categories}
+              onBatchUpdateItems={handleBatchUpdateItems}
+              onAddCategory={handleAddCategory}
+            />
+          </React.Suspense>
         )}
 
         {/* Recently Viewed Links Drawer */}

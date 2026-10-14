@@ -36,9 +36,11 @@ import { ADMIN_EMAIL } from '../utils/supabase';
 import { isTwitterOrX, isPixiv, getSafeImageUrl } from '../utils/mediaProxy';
 import { decodeHtmlEntities } from '../utils/text';
 import { findRelatedPosts, RelatedPostMatch } from '../utils/duplicateDetector';
+import { checkRequiresJapanVpn } from '../utils/vpnDetector';
 import { TwitterEmbed } from './TwitterEmbed';
 import { PixivViewer } from './PixivViewer';
 import { OptimizedImage } from './OptimizedImage';
+import { VpnGuideModal } from './VpnGuideModal';
 
 interface EmbeddedMediaViewerProps {
   item: MediaItem;
@@ -81,6 +83,10 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
   const [iframeKey, setIframeKey] = useState(0);
   const [showSnapshotView, setShowSnapshotView] = useState(false);
   const [showRelatedSection, setShowRelatedSection] = useState(true);
+  const [showVpnGuide, setShowVpnGuide] = useState(false);
+
+  // Detect whether current item is geo-restricted to Japan / requires Japan VPN
+  const vpnCheck = useMemo(() => checkRequiresJapanVpn(item), [item]);
 
   // Compute similar / duplicate / related posts in real-time
   const relatedPosts = useMemo(() => {
@@ -477,39 +483,63 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
             )}
           </div>
 
-          {/* Smart Fallback & Notice Bar - Tells user to open external link if blocked */}
-          <div className="p-3 sm:p-4 bg-black/85 border-t border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-            <div className="flex items-start gap-2.5 text-slate-300">
-              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-slate-200">
-                  {decodeHtmlEntities(item.title)}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  หากหน้านี้แสดงเป็นสีขาวหรือว่างเปล่า เกิดจากเว็บไซต์ปลายทาง ({domain}) ตั้งค่าบล็อก Iframe (X-Frame-Options) กรุณากดปุ่มเพื่อเปิดไปยังเว็บไซต์โดยตรง
-                </p>
+          {/* Smart Fallback & Notice Bar - Tells user to open external link and Japan VPN notice */}
+          <div className="p-3.5 sm:p-4.5 bg-black/90 border-t border-white/10 flex flex-col gap-3 text-xs">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5 text-slate-300">
+                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-slate-200">
+                    {decodeHtmlEntities(item.title)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                    หากหน้านี้แสดงเป็นสีขาวหรือว่างเปล่า เกิดจากเว็บไซต์ปลายทาง ({domain}) ตั้งค่าบล็อกการฝัง Iframe กรุณากดปุ่มเพื่อเปิดไปยังเว็บไซต์โดยตรง
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all touch-target"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copied ? t.card.copied : t.card.copyUrl}</span>
+                </button>
+
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] active:scale-95 touch-target font-display tracking-wider"
+                  title="เปิดหน้าเว็บในแท็บใหม่ (หากเปิดแล้วไม่เห็นหน้าตามลิงก์ อาจต้องเปิด VPN JP)"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>เปิด {domain} ในแท็บใหม่ ↗</span>
+                </a>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+            {/* Crucial Japan VPN Notice Banner for User Awareness */}
+            <div className="pt-2.5 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-gradient-to-r from-red-500/10 via-rose-500/5 to-transparent px-3 py-2 rounded-xl border border-red-500/20">
+              <div className="flex items-start sm:items-center gap-2 text-[11px] text-rose-200">
+                <span className="text-base shrink-0 select-none">🇯🇵</span>
+                <div>
+                  <span className="font-bold text-rose-300">ข้อควรทราบ:</span>{' '}
+                  <span className="text-rose-100/90">
+                    ในบางลิงก์หากเปิดแล้วไม่แสดงผล หรือกดเปิดลิงก์แล้วไม่เห็นหน้าตามลิงก์ (เช่น ขึ้น 403 Forbidden หรือหน้าว่างเปล่า) เกิดจากเว็บไซต์จำกัดสิทธิ์เฉพาะในประเทศญี่ปุ่น จำเป็นต้องเชื่อมต่อ <strong>VPN ประเทศญี่ปุ่น (VPN JP)</strong> จึงจะเข้าดูได้
+                  </span>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={handleCopyLink}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all touch-target"
+                onClick={() => setShowVpnGuide(true)}
+                className="text-[11px] font-semibold text-cyan-300 hover:text-white underline whitespace-nowrap shrink-0 transition-colors self-end sm:self-auto touch-target cursor-pointer"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? t.card.copied : t.card.copyUrl}</span>
+                ดูวิธีใช้ VPN JP ↗
               </button>
-
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:from-cyan-300 hover:to-teal-300 transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] active:scale-95 touch-target font-display tracking-wider"
-              >
-                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>เปิด {domain} ในแท็บใหม่ ↗</span>
-              </a>
             </div>
           </div>
 
@@ -536,6 +566,17 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
             <span className="text-[10px] sm:text-xs font-mono uppercase tracking-widest px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
               {item.mediaType.toUpperCase()}
             </span>
+            {vpnCheck.requiresVpn && (
+              <button
+                type="button"
+                onClick={() => setShowVpnGuide(true)}
+                className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 shrink-0 transition-all cursor-pointer touch-target shadow-sm active:scale-95"
+                title="ลิงก์นี้อาจต้องใช้ VPN ประเทศญี่ปุ่น (คลิกเพื่อดูวิธีใช้งาน)"
+              >
+                <span>🇯🇵</span>
+                <span>VPN JP</span>
+              </button>
+            )}
             <h2 className="text-xs sm:text-base font-bold text-slate-100 truncate" title={decodeHtmlEntities(item.title)}>
               {decodeHtmlEntities(item.title)}
             </h2>
@@ -575,6 +616,35 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
         {/* Scrollable Center Body */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
           
+          {/* Japan VPN Advisory Banner for Geoblocked / Japan Restricted Sites */}
+          {vpnCheck.requiresVpn && (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-red-500/20 via-rose-500/10 to-transparent border border-red-500/40 text-rose-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <span className="text-2xl shrink-0 select-none">🇯🇵</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-rose-300 text-xs sm:text-sm">
+                      เว็บไซต์นี้อาจต้องใช้ VPN ประเทศญี่ปุ่น (VPN JP)
+                    </h3>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-red-500/30 text-rose-200 border border-red-500/40">
+                      GEO-RESTRICTED
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-rose-100/90 mt-1 leading-relaxed">
+                    {vpnCheck.reason || 'เว็บไซต์นี้อาจจำกัดการเข้าชมเฉพาะ IP ประเทศญี่ปุ่น'} หากเปิดดูแล้วไม่แสดงผล หน้าขาวว่างเปล่า หรือกดเปิดลิงก์แล้วพบหน้า Error 403 เกิดจากระบบล็อกโซน แนะนำให้เชื่อมต่อ <strong>VPN ประเทศญี่ปุ่น (VPN JP)</strong> ก่อนเข้าชม
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVpnGuide(true)}
+                className="px-3.5 py-2 rounded-xl bg-red-500/25 hover:bg-red-500/35 text-white border border-red-500/40 text-xs font-bold whitespace-nowrap shrink-0 transition-all touch-target shadow-sm self-end sm:self-auto active:scale-95 cursor-pointer"
+              >
+                ดูวิธีใช้ VPN JP ↗
+              </button>
+            </div>
+          )}
+
           {/* Main Media Player / Embed */}
           {renderMediaContent()}
 
@@ -914,6 +984,12 @@ export const EmbeddedMediaViewer: React.FC<EmbeddedMediaViewerProps> = ({
         </div>
 
       </div>
+
+      {/* Full Japan VPN Guide & Tips Modal */}
+      <VpnGuideModal
+        isOpen={showVpnGuide}
+        onClose={() => setShowVpnGuide(false)}
+      />
     </div>
   );
 };
