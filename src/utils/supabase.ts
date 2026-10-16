@@ -244,19 +244,39 @@ export async function verifyAdminSession(): Promise<boolean> {
 
 export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
   try {
-    const { data, error } = await supabase
-      .from('vault_items')
-      .select('*')
-      .neq('id', SYSTEM_CONFIG_ITEM_ID)
-      .not('id', 'like', 'user_data_%')
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false });
+    let allRows: any[] = [];
+    let from = 0;
+    const step = 1000;
+    let hasMore = true;
 
-    if (error) {
-      console.warn('Supabase fetch items error:', error.message);
-      return null;
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('vault_items')
+        .select('*')
+        .neq('id', SYSTEM_CONFIG_ITEM_ID)
+        .not('id', 'like', 'user_data_%')
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(from, from + step - 1);
+
+      if (error) {
+        console.warn('Supabase fetch items error:', error.message);
+        return allRows.length > 0 ? allRows.map(mapRowToItem) : null;
+      }
+
+      if (data && data.length > 0) {
+        allRows = allRows.concat(data);
+        if (data.length < step) {
+          hasMore = false;
+        } else {
+          from += step;
+        }
+      } else {
+        hasMore = false;
+      }
     }
-    return (data || [])
+
+    return allRows
       .filter((row) => row.id !== SYSTEM_CONFIG_ITEM_ID && !row.id.startsWith('user_data_') && !row.tags?.includes('system-user-data'))
       .map(mapRowToItem);
   } catch (e) {
@@ -279,6 +299,30 @@ export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
     return true;
   } catch (e) {
     console.warn('Supabase save item exception:', e);
+    return false;
+  }
+}
+
+export async function saveItemsBatchToSupabase(items: MediaItem[]): Promise<boolean> {
+  const validItems = items.filter(
+    (item) => item.id !== SYSTEM_CONFIG_ITEM_ID && !item.id.startsWith('user_data_')
+  );
+  if (validItems.length === 0) return true;
+
+  try {
+    const chunkSize = 50;
+    for (let i = 0; i < validItems.length; i += chunkSize) {
+      const chunk = validItems.slice(i, i + chunkSize);
+      const rows = chunk.map(mapItemToRow);
+      const { error } = await supabase.from('vault_items').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        console.warn('Supabase batch upsert notice:', error.message);
+        return false;
+      }
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase batch upsert exception:', e);
     return false;
   }
 }

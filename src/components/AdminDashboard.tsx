@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   X, 
   Shield, 
@@ -30,7 +30,8 @@ import {
   CheckCircle2, 
   Palette, 
   LogOut,
-  AlertTriangle
+  AlertTriangle,
+  Cloud
 } from 'lucide-react';
 import { Category, Comment, MediaItem, SystemConfig, Tag, UserProfile } from '../types';
 import { 
@@ -74,6 +75,9 @@ interface AdminDashboardProps {
   onDeleteComment: (commentId: string) => void;
   onResetSampleData: () => void;
   onLogout?: () => void;
+  onForcePushLocalToCloud?: () => Promise<void> | void;
+  onSyncCloud?: () => Promise<void> | void;
+  onImportBackupJson?: (data: { items: MediaItem[]; categories?: Category[]; tags?: Tag[] }) => Promise<void> | void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -102,6 +106,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteComment,
   onResetSampleData,
   onLogout,
+  onForcePushLocalToCloud,
+  onSyncCloud,
+  onImportBackupJson,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'links' | 'duplicates' | 'taxonomies' | 'visuals' | 'comments' | 'config' | 'schema'>('overview');
   const [copiedSql, setCopiedSql] = useState(false);
@@ -406,6 +413,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     a.click();
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        if (parsed.items && Array.isArray(parsed.items)) {
+          if (onImportBackupJson) {
+            await onImportBackupJson(parsed);
+          }
+        } else {
+          alert('รูปแบบไฟล์สำรองไม่ถูกต้อง: ไม่พบรายการ items');
+        }
+      } catch (err) {
+        alert('ไม่สามารถอ่านไฟล์ JSON ได้ กรุณาตรวจสอบไฟล์');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // POSTGRES_SCHEMA_SQL imported from ../data/supabaseSchema
 
   const copySqlToClipboard = () => {
@@ -600,25 +632,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
-              {/* Quick Actions */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    onClose();
-                    onAddNewLink();
-                  }}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add New Link / Upload Media</span>
-                </button>
-                <button
-                  onClick={exportBackupJson}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium bg-white/5 text-slate-200 hover:bg-white/10 border border-white/10 transition-all"
-                >
-                  <Download className="w-4 h-4 text-cyan-400" />
-                  <span>Export Vault JSON Backup</span>
-                </button>
+              {/* Hidden JSON file input for Import */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileImport}
+                accept=".json"
+                className="hidden"
+              />
+
+              {/* Quick Actions & Cloud Device Synchronization */}
+              <div className="space-y-3 pt-2">
+                <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Cloud className="w-4 h-4 text-cyan-400" />
+                      <span className="text-xs font-bold text-cyan-200">
+                        ซิงค์ข้อมูลข้ามอุปกรณ์ (iPad ⇄ คอมพิวเตอร์ ⇄ มือถือ)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      ปัจจุบันในเครื่องนี้มีข้อมูล <span className="text-cyan-300 font-mono font-bold">{items.length} รายการ</span> (หาก iPad มี 540 แต่คอมมี 370 ให้กดปุ่มอัปโหลดบน iPad เพื่อส่งขึ้น Cloud ทันที)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                    {onForcePushLocalToCloud && (
+                      <button
+                        type="button"
+                        onClick={onForcePushLocalToCloud}
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all shadow-md shadow-cyan-950/40 cursor-pointer"
+                        title="ส่งข้อมูลทั้งหมดจากเครื่องนี้ขึ้น Supabase Cloud"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>📤 ส่งทั้งหมด {items.length} รายการขึ้น Cloud</span>
+                      </button>
+                    )}
+                    {onSyncCloud && (
+                      <button
+                        type="button"
+                        onClick={onSyncCloud}
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 transition-all cursor-pointer"
+                        title="ดึงข้อมูลล่าสุดจาก Cloud ลงมาที่เครื่องนี้"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>📥 ดึงข้อมูลจาก Cloud</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onAddNewLink();
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>เพิ่มลิงก์ใหม่ / อัปโหลดสื่อ</span>
+                  </button>
+                  <button
+                    onClick={exportBackupJson}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium bg-white/5 text-slate-200 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
+                    title="ดาวน์โหลดไฟล์ JSON สำรองข้อมูลทั้งหมด"
+                  >
+                    <Download className="w-4 h-4 text-cyan-400" />
+                    <span>สำรองไฟล์ (Export JSON)</span>
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium bg-white/5 text-slate-200 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
+                    title="นำเข้าไฟล์ JSON เพื่อกู้คืนหรือย้ายข้อมูลจากเครื่องอื่น"
+                  >
+                    <FileText className="w-4 h-4 text-amber-400" />
+                    <span>นำเข้าไฟล์ (Import JSON Backup)</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

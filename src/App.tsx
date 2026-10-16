@@ -67,6 +67,7 @@ import {
   supabase, 
   fetchItemsFromSupabase, 
   saveItemToSupabase, 
+  saveItemsBatchToSupabase,
   deleteItemFromSupabase, 
   updateItemLikesInSupabase,
   updateItemViewsInSupabase,
@@ -393,6 +394,62 @@ export default function App() {
       setIsCloudSyncing(false);
     }
   }, [user]);
+
+  // Force push ALL items from this device up to Supabase Cloud
+  const handleForcePushLocalToCloud = useCallback(async () => {
+    setIsCloudSyncing(true);
+    showToast(`⏳ กำลังอัปโหลดรายการทั้งหมด ${items.length} รายการขึ้น Cloud...`);
+    try {
+      const ok = await saveItemsBatchToSupabase(items);
+      if (ok) {
+        showToast(`✅ อัปโหลดสำเร็จแล้ว! ทั้งหมด ${items.length} รายการอยู่บน Cloud แล้ว (เครื่องอื่นกดซิงค์แล้วจะเห็นตรงกันทันที)`);
+      } else {
+        showToast(`⚠️ เกิดข้อผิดพลาดในการอัปโหลด กรุณาลองใหม่อีกครั้ง`);
+      }
+    } catch (e) {
+      console.warn('Force push error:', e);
+      showToast(`⚠️ อัปโหลดไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต`);
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  }, [items]);
+
+  // Import JSON Backup & Push to Cloud
+  const handleImportBackupJson = useCallback(async (data: { items: MediaItem[]; categories?: Category[]; tags?: Tag[] }) => {
+    if (!data.items || !Array.isArray(data.items)) {
+      showToast('⚠️ รูปแบบไฟล์สำรองไม่ถูกต้อง');
+      return;
+    }
+
+    showToast(`⏳ กำลังนำเข้า ${data.items.length} รายการ และซิงค์ขึ้น Cloud...`);
+    setIsCloudSyncing(true);
+
+    try {
+      const numbered = assignSequentialItemNumbers(data.items);
+      setItems(numbered);
+      saveItems(numbered);
+
+      if (data.categories && Array.isArray(data.categories)) {
+        setCategories(data.categories);
+        saveCategories(data.categories);
+        data.categories.forEach((cat) => saveCategoryToSupabase(cat).catch(() => {}));
+      }
+
+      if (data.tags && Array.isArray(data.tags)) {
+        setTags(data.tags);
+        saveTags(data.tags);
+        data.tags.forEach((tag) => saveTagToSupabase(tag).catch(() => {}));
+      }
+
+      await saveItemsBatchToSupabase(numbered);
+      showToast(`✨ นำเข้าและซิงค์ Cloud สำเร็จ! ทั้งหมด ${numbered.length} รายการตรงกันทุกเครื่องแล้ว`);
+    } catch (e) {
+      console.warn('Import backup error:', e);
+      showToast('⚠️ นำเข้าไฟล์ไม่สำเร็จ');
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  }, []);
 
   const handleFilterVpnLinks = () => {
     setFilters((prev) => ({
@@ -1948,6 +2005,9 @@ export default function App() {
             onDeleteComment={handleDeleteComment}
             onResetSampleData={handleResetSampleData}
             onLogout={handleLogout}
+            onForcePushLocalToCloud={handleForcePushLocalToCloud}
+            onSyncCloud={() => handleSyncWithCloud(true)}
+            onImportBackupJson={handleImportBackupJson}
           />
         )}
 
