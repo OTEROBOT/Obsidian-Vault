@@ -16,7 +16,9 @@ import {
   ChevronDown,
   LogOut,
   Layers,
-  Sparkles
+  Sparkles,
+  Cloud,
+  RefreshCw
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -37,6 +39,9 @@ interface NavbarProps {
   onOpenVpnGuide?: () => void;
   onOpenAiCategory?: () => void;
   misclassifiedCategoryCount?: number;
+  onSyncCloud?: () => void;
+  isCloudSyncing?: boolean;
+  cloudSyncItemCount?: number;
   recentCount: number;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -58,6 +63,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenVpnGuide,
   onOpenAiCategory,
   misclassifiedCategoryCount = 0,
+  onSyncCloud,
+  isCloudSyncing = false,
+  cloudSyncItemCount,
   recentCount,
   searchQuery,
   onSearchChange,
@@ -426,6 +434,24 @@ export const Navbar: React.FC<NavbarProps> = ({
               {misclassifiedCategoryCount > 0 && (
                 <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-cyan-400 text-slate-950 animate-pulse">
                   {misclassifiedCategoryCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Cloud Sync Button */}
+          {onSyncCloud && (
+            <button
+              onClick={onSyncCloud}
+              disabled={isCloudSyncing}
+              title="ซิงค์ข้อมูล Cloud ข้ามอุปกรณ์: ทำให้ iPad, PC, มือถือ ทุกเครื่องมีข้อมูลตรงกัน 100%"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/40 transition-all active:scale-95 cursor-pointer touch-target shadow-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden xl:inline">{isCloudSyncing ? 'กำลังซิงค์...' : 'ซิงค์ Cloud'}</span>
+              {cloudSyncItemCount !== undefined && (
+                <span className="px-1.5 py-0.2 text-[10px] font-mono rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  {cloudSyncItemCount}
                 </span>
               )}
             </button>

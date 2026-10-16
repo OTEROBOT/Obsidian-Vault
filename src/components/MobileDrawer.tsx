@@ -14,7 +14,9 @@ import {
   ExternalLink,
   Check,
   Layers,
-  Sparkles
+  Sparkles,
+  Cloud,
+  RefreshCw
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -37,6 +39,9 @@ interface MobileDrawerProps {
   onOpenVpnGuide?: () => void;
   onOpenAiCategory?: () => void;
   misclassifiedCategoryCount?: number;
+  onSyncCloud?: () => void;
+  isCloudSyncing?: boolean;
+  cloudSyncItemCount?: number;
   recentCount: number;
 }
 
@@ -55,6 +60,9 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onOpenVpnGuide,
   onOpenAiCategory,
   misclassifiedCategoryCount = 0,
+  onSyncCloud,
+  isCloudSyncing = false,
+  cloudSyncItemCount,
   recentCount,
 }) => {
   const { t, language, setLanguage, languages } = useTranslation();
@@ -244,6 +252,30 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                 ) : (
                   <span className="text-[10px] font-mono text-emerald-400">
                     ถูกต้องทั้งหมด
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Cloud Sync Trigger on Mobile & iPad */}
+            {onSyncCloud && (
+              <button
+                onClick={() => {
+                  onSyncCloud();
+                  onClose();
+                }}
+                disabled={isCloudSyncing}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/25 transition-all touch-target cursor-pointer disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3">
+                  <RefreshCw className={`w-4 h-4 text-cyan-400 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                  <span className="text-xs font-semibold">
+                    {isCloudSyncing ? 'กำลังซิงค์ Cloud...' : 'ซิงค์ข้อมูล Cloud (iPad ⇄ PC ⇄ มือถือ)'}
+                  </span>
+                </div>
+                {cloudSyncItemCount !== undefined && (
+                  <span className="text-[10px] font-mono font-bold text-cyan-300 bg-cyan-500/20 px-2 py-0.5 rounded-full border border-cyan-500/30">
+                    {cloudSyncItemCount} รายการ
                   </span>
                 )}
               </button>

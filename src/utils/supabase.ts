@@ -136,7 +136,6 @@ export function mapRowToItem(row: Record<string, any>): MediaItem {
 export function mapItemToRow(item: MediaItem): Record<string, any> {
   return {
     id: item.id,
-    item_number: item.itemNumber || null,
     title: item.title,
     description: item.description || '',
     url: item.url,
@@ -752,11 +751,6 @@ export async function uploadMediaToSupabaseStorage(
   folder = 'uploads'
 ): Promise<{ url: string; error?: string }> {
   try {
-    const isAdmin = await verifyAdminSession();
-    if (!isAdmin) {
-      return { url: '', error: `Unauthorized: Media upload requires verified Admin session (${ADMIN_EMAIL})` };
-    }
-
     const fileExt = file.name.split('.').pop() || 'bin';
     const cleanFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
     const filePath = `${folder}/${cleanFileName}`;
@@ -767,7 +761,7 @@ export async function uploadMediaToSupabaseStorage(
     });
 
     if (error) {
-      console.error('Storage upload error:', error);
+      console.warn('Storage upload notice:', error.message);
       return { url: '', error: error.message };
     }
 

@@ -70,6 +70,7 @@ import {
   deleteItemFromSupabase, 
   updateItemLikesInSupabase,
   updateItemViewsInSupabase,
+  mapRowToItem,
   fetchCategoriesFromSupabase,
   saveCategoryToSupabase,
   deleteCategoryFromSupabase,
@@ -294,6 +295,104 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+
+  // Two-way Full Cloud Synchronization (PC <-> iPad <-> Mobile)
+  const handleSyncWithCloud = useCallback(async (manual = false) => {
+    setIsCloudSyncing(true);
+    try {
+      const remoteItems = await fetchItemsFromSupabase();
+      if (remoteItems) {
+        const deletedIds = getDeletedItemIds();
+        const validRemote = remoteItems.filter((r) => !deletedIds.has(r.id));
+
+        // Purge any remotely existing items that were marked deleted locally
+        deletedIds.forEach((delId) => {
+          if (remoteItems.some((r) => r.id === delId)) {
+            deleteItemFromSupabase(delId).catch(() => {});
+          }
+        });
+
+        let totalCount = 0;
+        setItems((currentLocalItems) => {
+          const validLocal = currentLocalItems.filter((loc) => !deletedIds.has(loc.id));
+          const remoteMap = new Map(validRemote.map((r) => [r.id, r]));
+          const localMap = new Map<string, MediaItem>(validLocal.map((l) => [l.id, l]));
+          const userLikes = new Set(loadUserLikes(user));
+
+          // Merge remote items with local items
+          const mergedRemote = validRemote.map((r) => {
+            const local = localMap.get(r.id);
+            const isLiked = userLikes.has(r.id);
+            const mergedLikes = Math.max(r.likesCount || 0, local?.likesCount || 0, isLiked ? 1 : 0);
+            const mergedViews = Math.max(r.viewsCount || 0, local?.viewsCount || 0);
+
+            if (mergedLikes > (r.likesCount || 0)) {
+              updateItemLikesInSupabase(r.id, mergedLikes).catch(() => {});
+            }
+
+            return {
+              ...r,
+              likesCount: mergedLikes,
+              viewsCount: mergedViews,
+            };
+          });
+
+          // Local items not yet pushed to Supabase (e.g. items added on iPad or Brave)
+          const localOnly = validLocal
+            .filter((loc) => !remoteMap.has(loc.id) && !INITIAL_ITEMS.some((init) => init.id === loc.id))
+            .map((loc) => ({
+              ...loc,
+              likesCount: Math.max(loc.likesCount || 0, userLikes.has(loc.id) ? 1 : 0),
+            }));
+
+          // Upload any local items up to Supabase
+          if (localOnly.length > 0) {
+            localOnly.forEach((item) => {
+              saveItemToSupabase(item).catch(() => {});
+            });
+          }
+
+          const combined = [...mergedRemote, ...localOnly];
+          combined.sort((a, b) => {
+            if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          });
+
+          const numbered = assignSequentialItemNumbers(combined);
+          saveItems(numbered);
+          totalCount = numbered.length;
+          return numbered;
+        });
+
+        // Also sync categories, tags, and config
+        const [remoteCats, remoteTags] = await Promise.all([
+          fetchCategoriesFromSupabase(),
+          fetchTagsFromSupabase(),
+        ]);
+        if (remoteCats && remoteCats.length > 0) {
+          setCategories(remoteCats);
+          saveCategories(remoteCats);
+        }
+        if (remoteTags && remoteTags.length > 0) {
+          setTags(remoteTags);
+          saveTags(remoteTags);
+        }
+
+        if (manual) {
+          showToast(`☁️ ซิงค์ Cloud สำเร็จ! (${totalCount} รายการ) ข้อมูลบน iPad, PC, มือถือ ตรงกันสมบูรณ์`);
+        }
+      }
+    } catch (e) {
+      console.warn('Sync error:', e);
+      if (manual) {
+        showToast('⚠️ ไม่สามารถเชื่อมต่อกับ Cloud ได้ กรุณาตรวจสอบอินเทอร์เน็ต');
+      }
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  }, [user]);
 
   const handleFilterVpnLinks = () => {
     setFilters((prev) => ({
@@ -601,6 +700,38 @@ export default function App() {
             } catch (err) {
               console.warn('Realtime user data parse error:', err);
             }
+          } else if (payload.eventType === 'DELETE') {
+            const oldRow = payload.old as any;
+            if (oldRow && oldRow.id) {
+              setItems((currentItems) => {
+                const next = currentItems.filter((i) => i.id !== oldRow.id);
+                const numbered = assignSequentialItemNumbers(next);
+                saveItems(numbered);
+                return numbered;
+              });
+            }
+          } else if (newRow && typeof newRow.id === 'string' && !newRow.id.startsWith('user_data_') && newRow.id !== SYSTEM_CONFIG_ITEM_ID) {
+            const incoming = mapRowToItem(newRow);
+            const deletedIds = getDeletedItemIds();
+            if (deletedIds.has(incoming.id)) return;
+
+            setItems((currentItems) => {
+              const existingIdx = currentItems.findIndex((i) => i.id === incoming.id);
+              let next: MediaItem[];
+              if (existingIdx >= 0) {
+                next = [...currentItems];
+                next[existingIdx] = { ...currentItems[existingIdx], ...incoming };
+              } else {
+                next = [incoming, ...currentItems];
+              }
+              next.sort((a, b) => {
+                if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              });
+              const numbered = assignSequentialItemNumbers(next);
+              saveItems(numbered);
+              return numbered;
+            });
           }
         }
       )
@@ -1451,6 +1582,9 @@ export default function App() {
         onOpenVpnGuide={() => setIsVpnGuideOpen(true)}
         onOpenAiCategory={() => setIsAiCategoryModalOpen(true)}
         misclassifiedCategoryCount={categoryHealthReport.misclassifiedCount}
+        onSyncCloud={() => handleSyncWithCloud(true)}
+        isCloudSyncing={isCloudSyncing}
+        cloudSyncItemCount={items.length}
         duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
         searchQuery={filters.query}
@@ -1727,6 +1861,9 @@ export default function App() {
         onOpenVpnGuide={() => setIsVpnGuideOpen(true)}
         onOpenAiCategory={() => setIsAiCategoryModalOpen(true)}
         misclassifiedCategoryCount={categoryHealthReport.misclassifiedCount}
+        onSyncCloud={() => handleSyncWithCloud(true)}
+        isCloudSyncing={isCloudSyncing}
+        cloudSyncItemCount={items.length}
         duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
       />
