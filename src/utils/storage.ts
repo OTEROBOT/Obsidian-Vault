@@ -185,13 +185,15 @@ export function loadItems(): MediaItem[] {
     const deleted = getDeletedItemIds();
     let parsedList: MediaItem[] = [];
     if (raw === null) {
-      parsedList = INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
+      // For fresh browsers (e.g. Brave, new iPad, Safari), don't inject obsolete mock data.
+      // App.tsx will immediately hydrate the authentic 540+ items from Supabase Cloud.
+      parsedList = [];
     } else {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         parsedList = parsed.filter((i) => !deleted.has(i.id));
       } else {
-        parsedList = INITIAL_ITEMS.filter((i) => !deleted.has(i.id));
+        parsedList = [];
       }
     }
 

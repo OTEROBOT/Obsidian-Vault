@@ -214,7 +214,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Global Fast Search Bar (Desktop / Tablet) */}
-        <div className="hidden md:flex flex-1 min-w-0 max-w-xs md:max-w-sm lg:max-w-md xl:max-w-lg 2xl:max-w-2xl mx-1.5 sm:mx-2 lg:mx-4">
+        <div className="hidden md:flex flex-1 min-w-0 max-w-[160px] sm:max-w-[200px] md:max-w-[220px] lg:max-w-xs xl:max-w-md 2xl:max-w-2xl mx-1 sm:mx-2 lg:mx-4">
           <div className="relative w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -223,7 +223,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={t.nav.searchPlaceholder}
-              className="w-full pl-10 pr-14 lg:pr-20 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm glass-input text-slate-100 placeholder-slate-500 focus:text-white"
+              className="w-full pl-9 pr-10 lg:pr-20 py-2 rounded-xl text-xs sm:text-sm glass-input text-slate-100 placeholder-slate-500 focus:text-white"
             />
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searchQuery ? (
@@ -449,20 +449,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ? `ซิงค์ Cloud: มี ${cloudSyncItemCount} รายการรอการซิงค์`
                   : 'ซิงค์ข้อมูล Cloud: ข้อมูลบน iPad, PC, มือถือ ตรงกันสมบูรณ์ 100%'
               }
-              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target shadow-sm disabled:opacity-50 ${
+              className={`flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target shadow-sm disabled:opacity-50 shrink-0 ${
                 cloudSyncItemCount && cloudSyncItemCount > 0
                   ? 'text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                   : 'text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/40'
               }`}
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 shrink-0 ${isCloudSyncing ? 'animate-spin' : ''}`} />
               <span className="hidden xl:inline">{isCloudSyncing ? 'กำลังซิงค์...' : 'ซิงค์ Cloud'}</span>
               {cloudSyncItemCount !== undefined && cloudSyncItemCount > 0 ? (
-                <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40">
+                <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0">
                   {cloudSyncItemCount}
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
+                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   <span className="hidden 2xl:inline">ตรงกัน</span>
                 </span>
@@ -487,7 +487,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenAdmin}
               title={t.nav.admin}
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)] active:scale-95"
+              className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)] active:scale-95 shrink-0"
             >
               <Shield className="w-4 h-4 text-amber-400" />
               <span className="hidden xl:inline">{t.nav.admin}</span>
@@ -499,7 +499,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenAddLink}
               title={t.nav.addLink}
-              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95 shrink-0"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span className="hidden xl:inline">{t.nav.addLink}</span>

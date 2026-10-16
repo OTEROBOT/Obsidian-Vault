@@ -488,23 +488,46 @@ export async function deleteTagFromSupabase(id: string): Promise<boolean> {
 export const SYSTEM_CONFIG_ITEM_ID = '__system_vault_config__';
 export const SYSTEM_DELETED_ITEMS_ID = '__system_deleted_item_ids__';
 
+// Unified Realtime Broadcast Channel name across all devices (PC, iPad, Mac, Android, iPhone)
+export const VAULT_SYNC_CHANNEL_NAME = 'vault_realtime_sync_v2';
+
 // Shared Realtime Broadcast Channel across all open tabs, PC, iPad, and phones
-export const vaultBroadcastChannel = supabase.channel('vault_realtime_broadcast');
+export const vaultBroadcastChannel = supabase.channel(VAULT_SYNC_CHANNEL_NAME, {
+  config: { broadcast: { self: false } },
+});
 vaultBroadcastChannel.subscribe();
+
+// Browser-native BroadcastChannel for 0ms same-origin tab synchronization
+export const localVaultBroadcast =
+  typeof window !== 'undefined' && 'BroadcastChannel' in window
+    ? new BroadcastChannel('obsidian_vault_local_broadcast')
+    : null;
 
 /**
  * Broadcast an instant sync event across all open devices (sub-50ms latency)
+ * and across all open browser tabs (0ms latency)
  */
 export async function broadcastVaultAction(action: string, payload: Record<string, any> = {}): Promise<void> {
+  const syncEvent = {
+    action,
+    timestamp: Date.now(),
+    deviceId: typeof window !== 'undefined' ? window.sessionStorage?.getItem('__vault_device_id__') || 'client' : 'client',
+    ...payload,
+  };
+
+  // 1. Same-device local tabs (works offline, completely immune to Brave Shields or adblockers)
+  try {
+    localVaultBroadcast?.postMessage(syncEvent);
+  } catch (err) {
+    console.warn('Local broadcast notice:', err);
+  }
+
+  // 2. Cross-device Realtime Broadcast (PC <-> iPad <-> Mobile)
   try {
     await vaultBroadcastChannel.send({
       type: 'broadcast',
       event: 'vault_sync',
-      payload: {
-        action,
-        timestamp: Date.now(),
-        ...payload,
-      },
+      payload: syncEvent,
     });
   } catch (err) {
     console.warn('broadcastVaultAction notice:', err);

@@ -9,7 +9,8 @@ import {
   Clock,
   Compass,
   Database,
-  ArrowUpRight
+  ArrowUpRight,
+  RefreshCw
 } from 'lucide-react';
 import { 
   Category, 
@@ -94,6 +95,9 @@ import {
   getUserDataItemId,
   SYSTEM_CONFIG_ITEM_ID,
   SYSTEM_DELETED_ITEMS_ID,
+  VAULT_SYNC_CHANNEL_NAME,
+  vaultBroadcastChannel,
+  localVaultBroadcast,
   fetchCloudDeletedItemIds,
   recordCloudDeletedItemIds,
   broadcastVaultAction,
@@ -308,6 +312,7 @@ export default function App() {
 
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [unsyncedCount, setUnsyncedCount] = useState<number>(() => getPendingUploadItemIds().size);
+  const [isInitialCloudHydrating, setIsInitialCloudHydrating] = useState<boolean>(() => loadItems().length === 0);
 
   // Two-way Full Cloud Synchronization (PC <-> iPad <-> Mobile)
   const handleSyncWithCloud = useCallback(async (manual = false) => {
@@ -648,10 +653,21 @@ export default function App() {
             saveItems(numbered);
             return numbered;
           });
+        } else {
+          setItems((prev) => {
+            if (prev.length === 0) {
+              const init = assignSequentialItemNumbers(INITIAL_ITEMS);
+              saveItems(init);
+              return init;
+            }
+            return prev;
+          });
         }
+        setIsInitialCloudHydrating(false);
       })
       .catch((err) => {
         console.warn('Supabase remote fetch warning:', err);
+        setIsInitialCloudHydrating(false);
       });
 
     return () => {
@@ -797,9 +813,28 @@ export default function App() {
             } catch (err) {
               console.warn('Realtime user data parse error:', err);
             }
+          } else if (newRow && newRow.id === SYSTEM_DELETED_ITEMS_ID) {
+            try {
+              if (newRow.description) {
+                const deletedList = JSON.parse(newRow.description);
+                if (Array.isArray(deletedList) && deletedList.length > 0) {
+                  batchMarkItemsAsDeleted(deletedList);
+                  const delSet = new Set<string>(deletedList);
+                  setItems((current) => {
+                    const next = current.filter((it) => !delSet.has(it.id));
+                    const numbered = assignSequentialItemNumbers(next);
+                    saveItems(numbered);
+                    return numbered;
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn('Realtime deleted ids parse error:', err);
+            }
           } else if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as any;
             if (oldRow && oldRow.id) {
+              markItemAsDeleted(oldRow.id);
               setItems((currentItems) => {
                 const next = currentItems.filter((i) => i.id !== oldRow.id);
                 const numbered = assignSequentialItemNumbers(next);
@@ -807,7 +842,7 @@ export default function App() {
                 return numbered;
               });
             }
-          } else if (newRow && typeof newRow.id === 'string' && !newRow.id.startsWith('user_data_') && newRow.id !== SYSTEM_CONFIG_ITEM_ID) {
+          } else if (newRow && typeof newRow.id === 'string' && !newRow.id.startsWith('user_data_') && newRow.id !== SYSTEM_CONFIG_ITEM_ID && newRow.id !== SYSTEM_DELETED_ITEMS_ID) {
             const incoming = mapRowToItem(newRow);
             const deletedIds = getDeletedItemIds();
             if (deletedIds.has(incoming.id)) return;
@@ -885,71 +920,79 @@ export default function App() {
       )
       .subscribe();
 
-    // 6. Supabase Realtime Broadcast Channel (<50ms instantaneous cross-device sync)
-    const realtimeBroadcastChannel = supabase
-      .channel('vault_client_broadcast_listener')
-      .on(
-        'broadcast',
-        { event: 'vault_sync' },
-        (e) => {
-          const payload = e.payload;
-          if (!payload) return;
-          if (payload.action === 'batch_update') {
-            const { updatedItems = [], deletedItemIds = [] } = payload;
-            const deletedSet = new Set<string>(deletedItemIds);
-            batchMarkItemsAsDeleted(deletedItemIds);
+    // 6. Unified Instant Realtime Sync Handler (Sub-50ms cross-device + 0ms local tabs)
+    const handleIncomingSync = (payload: any) => {
+      if (!payload) return;
+      if (payload.action === 'batch_update') {
+        const { updatedItems = [], deletedItemIds = [] } = payload;
+        const deletedSet = new Set<string>(deletedItemIds);
+        batchMarkItemsAsDeleted(deletedItemIds);
 
-            setItems((prevItems) => {
-              let nextItems = prevItems.filter((it) => !deletedSet.has(it.id));
-              const updatedMap = new Map((updatedItems as MediaItem[]).map((u) => [u.id, u]));
-              nextItems = nextItems.map((it) => updatedMap.get(it.id) || it);
-              const numbered = assignSequentialItemNumbers(nextItems);
-              saveItems(numbered);
-              return numbered;
-            });
-            showToast('⚡ ซิงค์การรวม/ลบลิงก์ซ้ำจากอุปกรณ์อื่นแบบเรียลไทม์แล้ว');
-          } else if (payload.action === 'delete_item') {
-            const { itemId } = payload;
-            if (itemId) {
-              markItemAsDeleted(itemId);
-              setItems((prevItems) => {
-                const nextItems = prevItems.filter((i) => i.id !== itemId);
-                const numbered = assignSequentialItemNumbers(nextItems);
-                saveItems(numbered);
-                return numbered;
-              });
-              showToast('🗑️ ซิงค์การลบรายการจากอุปกรณ์อื่นเรียบร้อย (Live)');
-            }
-          } else if (payload.action === 'save_item') {
-            const { item } = payload;
-            if (item) {
-              setItems((prevItems) => {
-                const existingIdx = prevItems.findIndex((i) => i.id === item.id);
-                let next: MediaItem[];
-                if (existingIdx >= 0) {
-                  next = [...prevItems];
-                  next[existingIdx] = { ...prevItems[existingIdx], ...item };
-                } else {
-                  next = [item, ...prevItems];
-                }
-                const numbered = assignSequentialItemNumbers(next);
-                saveItems(numbered);
-                return numbered;
-              });
-              showToast('✨ ซิงค์รายการใหม่จากอุปกรณ์อื่นแล้ว (Live)');
-            }
-          } else if (payload.action === 'config_update') {
-            if (payload.config) {
-              setConfig((currentCfg) => {
-                const merged = { ...currentCfg, ...payload.config };
-                saveConfig(merged);
-                return merged;
-              });
-            }
-          }
+        setItems((prevItems) => {
+          let nextItems = prevItems.filter((it) => !deletedSet.has(it.id));
+          const updatedMap = new Map((updatedItems as MediaItem[]).map((u) => [u.id, u]));
+          nextItems = nextItems.map((it) => updatedMap.get(it.id) || it);
+          const numbered = assignSequentialItemNumbers(nextItems);
+          saveItems(numbered);
+          return numbered;
+        });
+        showToast('⚡ ซิงค์การจัดการลิงก์ซ้ำจากอุปกรณ์อื่นเรียบร้อย (Real-time Live)');
+      } else if (payload.action === 'delete_item') {
+        const { itemId } = payload;
+        if (itemId) {
+          markItemAsDeleted(itemId);
+          setItems((prevItems) => {
+            const nextItems = prevItems.filter((i) => i.id !== itemId);
+            const numbered = assignSequentialItemNumbers(nextItems);
+            saveItems(numbered);
+            return numbered;
+          });
+          showToast('🗑️ ซิงค์การลบรายการจากอุปกรณ์อื่นเรียบร้อย (Live)');
         }
-      )
-      .subscribe();
+      } else if (payload.action === 'save_item') {
+        const { item } = payload;
+        if (item) {
+          setItems((prevItems) => {
+            const existingIdx = prevItems.findIndex((i) => i.id === item.id);
+            let next: MediaItem[];
+            if (existingIdx >= 0) {
+              next = [...prevItems];
+              next[existingIdx] = { ...prevItems[existingIdx], ...item };
+            } else {
+              next = [item, ...prevItems];
+            }
+            const numbered = assignSequentialItemNumbers(next);
+            saveItems(numbered);
+            return numbered;
+          });
+          showToast('✨ ซิงค์รายการใหม่จากอุปกรณ์อื่นแล้ว (Live)');
+        }
+      } else if (payload.action === 'config_update') {
+        if (payload.config) {
+          setConfig((currentCfg) => {
+            const merged = { ...currentCfg, ...payload.config };
+            saveConfig(merged);
+            return merged;
+          });
+        }
+      }
+    };
+
+    // A. Listen via Supabase Realtime Broadcast (PC <-> iPad <-> Mobile)
+    vaultBroadcastChannel.on(
+      'broadcast',
+      { event: 'vault_sync' },
+      (e) => {
+        handleIncomingSync(e.payload);
+      }
+    );
+
+    // B. Listen via Browser BroadcastChannel (Instant sync across tabs in Chrome / Brave / Safari)
+    if (localVaultBroadcast) {
+      localVaultBroadcast.onmessage = (e) => {
+        handleIncomingSync(e.data);
+      };
+    }
 
     // 7. Auto re-validate on Tab Focus / iPad screen wakeup
     const handleVisibilityChange = () => {
@@ -964,12 +1007,12 @@ export default function App() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleWindowFocus);
 
-    // 8. 35-second periodic heartbeat sync when page is active
+    // 8. 15-second heartbeat sync for background updates (impervious to shield blocks)
     const syncInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         handleSyncWithCloud(false);
       }
-    }, 35000);
+    }, 15000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -978,7 +1021,6 @@ export default function App() {
       supabase.removeChannel(realtimeItemsChannel);
       supabase.removeChannel(realtimeConfigTableChannel);
       supabase.removeChannel(realtimeCommentsChannel);
-      supabase.removeChannel(realtimeBroadcastChannel);
     };
   }, [user.email]);
 
@@ -1914,7 +1956,17 @@ export default function App() {
         )}
 
         {/* Media Bookmarks Grid / List - Fluid Cross-Device Breakpoints */}
-        {filteredItems.length === 0 ? (
+        {isInitialCloudHydrating && items.length === 0 ? (
+          <div className="rounded-3xl glass-panel p-10 sm:p-16 text-center flex flex-col items-center justify-center space-y-4 border border-cyan-500/30">
+            <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold text-slate-200">กำลังเชื่อมต่อและโหลดคลังลิงก์จาก Cloud...</h3>
+              <p className="text-xs text-slate-400 max-w-sm">
+                กำลังซิงค์ข้อมูลให้ตรงกันทุกอุปกรณ์แบบเรียลไทม์ (iPad, PC, Brave, Chrome)
+              </p>
+            </div>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="rounded-3xl glass-panel p-8 sm:p-12 text-center flex flex-col items-center justify-center space-y-4 border border-white/10">
             <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
               <Inbox className="w-8 h-8" />
