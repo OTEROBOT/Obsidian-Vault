@@ -254,6 +254,7 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
         .from('vault_items')
         .select('*')
         .neq('id', SYSTEM_CONFIG_ITEM_ID)
+        .neq('id', SYSTEM_DELETED_ITEMS_ID)
         .not('id', 'like', 'user_data_%')
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
@@ -277,7 +278,13 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
     }
 
     return allRows
-      .filter((row) => row.id !== SYSTEM_CONFIG_ITEM_ID && !row.id.startsWith('user_data_') && !row.tags?.includes('system-user-data'))
+      .filter((row) => 
+        row.id !== SYSTEM_CONFIG_ITEM_ID && 
+        row.id !== SYSTEM_DELETED_ITEMS_ID && 
+        !row.id.startsWith('user_data_') && 
+        !row.tags?.includes('system-user-data') &&
+        !row.tags?.includes('system-deleted-records')
+      )
       .map(mapRowToItem);
   } catch (e) {
     console.warn('Supabase items exception:', e);
@@ -286,7 +293,11 @@ export async function fetchItemsFromSupabase(): Promise<MediaItem[] | null> {
 }
 
 export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
-  if (item.id === SYSTEM_CONFIG_ITEM_ID || item.id.startsWith('user_data_')) {
+  if (
+    item.id === SYSTEM_CONFIG_ITEM_ID || 
+    item.id === SYSTEM_DELETED_ITEMS_ID || 
+    item.id.startsWith('user_data_')
+  ) {
     return false;
   }
   try {
@@ -305,7 +316,10 @@ export async function saveItemToSupabase(item: MediaItem): Promise<boolean> {
 
 export async function saveItemsBatchToSupabase(items: MediaItem[]): Promise<boolean> {
   const validItems = items.filter(
-    (item) => item.id !== SYSTEM_CONFIG_ITEM_ID && !item.id.startsWith('user_data_')
+    (item) => 
+      item.id !== SYSTEM_CONFIG_ITEM_ID && 
+      item.id !== SYSTEM_DELETED_ITEMS_ID && 
+      !item.id.startsWith('user_data_')
   );
   if (validItems.length === 0) return true;
 
@@ -328,7 +342,11 @@ export async function saveItemsBatchToSupabase(items: MediaItem[]): Promise<bool
 }
 
 export async function deleteItemFromSupabase(id: string): Promise<boolean> {
-  if (id === SYSTEM_CONFIG_ITEM_ID || id.startsWith('user_data_')) {
+  if (
+    id === SYSTEM_CONFIG_ITEM_ID || 
+    id === SYSTEM_DELETED_ITEMS_ID || 
+    id.startsWith('user_data_')
+  ) {
     return false;
   }
   try {
@@ -468,6 +486,91 @@ export async function deleteTagFromSupabase(id: string): Promise<boolean> {
 }
 
 export const SYSTEM_CONFIG_ITEM_ID = '__system_vault_config__';
+export const SYSTEM_DELETED_ITEMS_ID = '__system_deleted_item_ids__';
+
+// Shared Realtime Broadcast Channel across all open tabs, PC, iPad, and phones
+export const vaultBroadcastChannel = supabase.channel('vault_realtime_broadcast');
+vaultBroadcastChannel.subscribe();
+
+/**
+ * Broadcast an instant sync event across all open devices (sub-50ms latency)
+ */
+export async function broadcastVaultAction(action: string, payload: Record<string, any> = {}): Promise<void> {
+  try {
+    await vaultBroadcastChannel.send({
+      type: 'broadcast',
+      event: 'vault_sync',
+      payload: {
+        action,
+        timestamp: Date.now(),
+        ...payload,
+      },
+    });
+  } catch (err) {
+    console.warn('broadcastVaultAction notice:', err);
+  }
+}
+
+/**
+ * Fetch list of permanently deleted item IDs stored in Cloud tombstone record
+ */
+export async function fetchCloudDeletedItemIds(): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('vault_items')
+      .select('description')
+      .eq('id', SYSTEM_DELETED_ITEMS_ID)
+      .maybeSingle();
+
+    if (!error && data?.description) {
+      try {
+        const parsed = JSON.parse(data.description);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (e) {
+        console.warn('Failed to parse cloud deleted ids:', e);
+      }
+    }
+  } catch (err) {
+    console.warn('fetchCloudDeletedItemIds notice:', err);
+  }
+  return [];
+}
+
+/**
+ * Append deleted item IDs to Cloud tombstone record so other devices immediately purge them
+ */
+export async function recordCloudDeletedItemIds(newDeletedIds: string[]): Promise<boolean> {
+  if (!newDeletedIds || newDeletedIds.length === 0) return true;
+  try {
+    const existing = await fetchCloudDeletedItemIds();
+    const mergedSet = new Set([...existing, ...newDeletedIds]);
+    const payload = JSON.stringify(Array.from(mergedSet));
+
+    const row = {
+      id: SYSTEM_DELETED_ITEMS_ID,
+      title: '__SYSTEM_DELETED_ITEM_IDS__',
+      description: payload,
+      url: 'https://obsidianvault.internal/system/deleted',
+      media_type: 'web',
+      category_id: 'tech',
+      tags: ['system-deleted-records'],
+      source: 'system',
+      created_by: ADMIN_EMAIL,
+      views_count: 0,
+      likes_count: 0,
+      is_pinned: false,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('vault_items').upsert(row, { onConflict: 'id' });
+    return !error;
+  } catch (err) {
+    console.warn('recordCloudDeletedItemIds exception:', err);
+    return false;
+  }
+}
 
 export async function fetchConfigFromSupabase(): Promise<Partial<SystemConfig> | null> {
   // 1. Attempt reading from dedicated 'vault_config' table

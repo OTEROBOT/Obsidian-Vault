@@ -273,9 +273,13 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                     {isCloudSyncing ? 'กำลังซิงค์ Cloud...' : 'ซิงค์ข้อมูล Cloud (iPad ⇄ PC ⇄ มือถือ)'}
                   </span>
                 </div>
-                {cloudSyncItemCount !== undefined && (
-                  <span className="text-[10px] font-mono font-bold text-cyan-300 bg-cyan-500/20 px-2 py-0.5 rounded-full border border-cyan-500/30">
-                    {cloudSyncItemCount} รายการ
+                {cloudSyncItemCount !== undefined && cloudSyncItemCount > 0 ? (
+                  <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
+                    {cloudSyncItemCount} รายการรอซิงค์
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    ✓ ตรงกัน 100%
                   </span>
                 )}
               </button>

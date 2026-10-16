@@ -165,7 +165,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <header
-        className={`fixed top-0 left-0 right-0 z-40 w-full border-b transition-all duration-300 ease-out will-change-transform ${
+        className={`fixed top-0 left-0 right-0 z-40 w-full max-w-full overflow-x-clip border-b transition-all duration-300 ease-out will-change-transform ${
           isVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
         } ${
           isScrolled
@@ -173,11 +173,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             : 'bg-[#090a0f]/85 dark:bg-[#090a0f]/85 border-white/10 backdrop-blur-xl'
         }`}
       >
-      <div className="max-w-7xl 2xl:max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-2 sm:gap-4">
+      <div className="w-full max-w-7xl 2xl:max-w-[1700px] mx-auto px-2.5 sm:px-4 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-1.5 sm:gap-3 overflow-x-clip">
         
         {/* Brand Logo */}
         <div 
-          className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group shrink-0" 
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group shrink-0 min-w-0" 
           onClick={() => onSearchChange('')}
           title={vaultName || t.common.appName}
         >
@@ -198,9 +198,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               </>
             )}
           </div>
-          <div className="shrink-0 flex flex-col justify-center">
+          <div className="shrink-0 flex flex-col justify-center min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="font-display font-bold text-sm sm:text-base lg:text-lg tracking-wider text-slate-100 group-hover:text-cyan-300 transition-colors whitespace-nowrap">
+              <span className="font-display font-bold text-xs sm:text-base lg:text-lg tracking-wider text-slate-100 group-hover:text-cyan-300 transition-colors truncate max-w-[130px] sm:max-w-[200px] md:max-w-none">
                 {vaultName || t.common.appName}
               </span>
               <span className="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hidden 2xl:inline-block">
@@ -214,7 +214,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Global Fast Search Bar (Desktop / Tablet) */}
-        <div className="hidden md:flex flex-1 min-w-[160px] max-w-xs lg:max-w-md xl:max-w-lg 2xl:max-w-2xl mx-2 sm:mx-3 lg:mx-4">
+        <div className="hidden md:flex flex-1 min-w-0 max-w-xs md:max-w-sm lg:max-w-md xl:max-w-lg 2xl:max-w-2xl mx-1.5 sm:mx-2 lg:mx-4">
           <div className="relative w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -254,8 +254,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Search className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
-          {/* 🌐 Language Switcher Dropdown */}
-          <div className="relative" ref={langRef}>
+          {/* 🌐 Language Switcher Dropdown (in Drawer on mobile/tablet to save space) */}
+          <div className="relative hidden xl:block" ref={langRef}>
             <button
               onClick={() => {
                 setIsLangOpen(!isLangOpen);
@@ -303,8 +303,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* 🌓 Theme Mode Toggle (Dark / Light / System) - Hidden on mobile to prevent navbar crowding */}
-          <div className="relative hidden sm:block" ref={themeRef}>
+          {/* 🌓 Theme Mode Toggle (Dark / Light / System) - In Drawer on mobile/tablet */}
+          <div className="relative hidden xl:block" ref={themeRef}>
             <button
               onClick={() => {
                 setIsThemeOpen(!isThemeOpen);
@@ -386,10 +386,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenRecent}
             title={t.nav.recent}
-            className="hidden sm:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all active:scale-95"
+            className="hidden xl:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all active:scale-95"
           >
             <Clock className="w-4 h-4 text-cyan-400" />
-            <span className="hidden xl:inline">{t.nav.recent}</span>
+            <span>{t.nav.recent}</span>
             {recentCount > 0 && (
               <span className="px-1.5 py-0.2 text-[10px] font-mono rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                 {recentCount}
@@ -402,14 +402,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenDuplicateChecker}
               title="ตรวจสอบและจัดการลิงก์ซ้ำ"
-              className={`hidden sm:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target ${
+              className={`hidden xl:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target ${
                 duplicateCount > 0
                   ? 'text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
                   : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
               }`}
             >
               <Layers className="w-4 h-4 text-cyan-400" />
-              <span className="hidden xl:inline">ตรวจลิงก์ซ้ำ</span>
+              <span>ตรวจลิงก์ซ้ำ</span>
               {duplicateCount > 0 && (
                 <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-rose-500 text-white animate-pulse">
                   {duplicateCount}
@@ -423,14 +423,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenAiCategory}
               title="AI จัดหมวดหมู่อัตโนมัติ: ตรวจสอบและแก้ไขหมวดหมู่ให้ตรงกับลิงก์ต้นทางแท้จริง (เช่น X -> หมวดหมู่ X)"
-              className={`hidden sm:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target ${
+              className={`hidden xl:flex relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target ${
                 misclassifiedCategoryCount > 0
                   ? 'text-cyan-300 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
                   : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
               }`}
             >
               <Sparkles className="w-4 h-4 text-cyan-400" />
-              <span className="hidden xl:inline">AI จัดหมวดหมู่</span>
+              <span>AI จัดหมวดหมู่</span>
               {misclassifiedCategoryCount > 0 && (
                 <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-cyan-400 text-slate-950 animate-pulse">
                   {misclassifiedCategoryCount}
@@ -444,14 +444,27 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onSyncCloud}
               disabled={isCloudSyncing}
-              title="ซิงค์ข้อมูล Cloud ข้ามอุปกรณ์: ทำให้ iPad, PC, มือถือ ทุกเครื่องมีข้อมูลตรงกัน 100%"
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/40 transition-all active:scale-95 cursor-pointer touch-target shadow-sm disabled:opacity-50"
+              title={
+                cloudSyncItemCount && cloudSyncItemCount > 0
+                  ? `ซิงค์ Cloud: มี ${cloudSyncItemCount} รายการรอการซิงค์`
+                  : 'ซิงค์ข้อมูล Cloud: ข้อมูลบน iPad, PC, มือถือ ตรงกันสมบูรณ์ 100%'
+              }
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer touch-target shadow-sm disabled:opacity-50 ${
+                cloudSyncItemCount && cloudSyncItemCount > 0
+                  ? 'text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                  : 'text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/40'
+              }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isCloudSyncing ? 'animate-spin' : ''}`} />
               <span className="hidden xl:inline">{isCloudSyncing ? 'กำลังซิงค์...' : 'ซิงค์ Cloud'}</span>
-              {cloudSyncItemCount !== undefined && (
-                <span className="px-1.5 py-0.2 text-[10px] font-mono rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              {cloudSyncItemCount !== undefined && cloudSyncItemCount > 0 ? (
+                <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40">
                   {cloudSyncItemCount}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span className="hidden 2xl:inline">ตรงกัน</span>
                 </span>
               )}
             </button>
@@ -462,7 +475,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenVpnGuide}
               title="คำแนะนำ: ทำไมบางลิงก์เปิดไม่ได้? (VPN JP)"
-              className="hidden lg:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-rose-300 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 hover:border-rose-500/40 transition-all active:scale-95 cursor-pointer touch-target shadow-sm"
+              className="hidden 2xl:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-rose-300 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 hover:border-rose-500/40 transition-all active:scale-95 cursor-pointer touch-target shadow-sm"
             >
               <span className="text-sm select-none">🇯🇵</span>
               <span className="hidden xl:inline">คู่มือ VPN JP</span>
@@ -474,7 +487,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenAdmin}
               title={t.nav.admin}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)] active:scale-95"
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.1)] active:scale-95"
             >
               <Shield className="w-4 h-4 text-amber-400" />
               <span className="hidden xl:inline">{t.nav.admin}</span>
@@ -486,7 +499,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenAddLink}
               title={t.nav.addLink}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95"
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span className="hidden xl:inline">{t.nav.addLink}</span>
@@ -521,16 +534,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </button>
 
-              {/* Direct Logout Button in Navbar - Hidden on mobile screens to prevent avatar clipping */}
+              {/* Direct Logout Button in Navbar - Hidden on tablet/mobile screens (in Drawer & Profile) */}
               <button
                 type="button"
                 onClick={onLogout}
                 title={t.nav.signOut || 'ออกจากระบบ'}
-                className="hidden sm:flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
+                className="hidden xl:flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-rose-100 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all active:scale-95 touch-target shadow-sm"
                 aria-label={t.nav.signOut || 'ออกจากระบบ'}
               >
                 <LogOut className="w-3.5 h-3.5 text-rose-400" />
-                <span className="hidden xl:inline">{t.nav.signOut || 'ออกจากระบบ'}</span>
+                <span>{t.nav.signOut || 'ออกจากระบบ'}</span>
               </button>
             </div>
           ) : (

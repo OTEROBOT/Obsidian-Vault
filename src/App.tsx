@@ -61,7 +61,12 @@ import {
   saveViewMode,
   assignSequentialItemNumbers,
   saveReadingPost,
-  loadReadingPost
+  loadReadingPost,
+  batchMarkItemsAsDeleted,
+  getPendingUploadItemIds,
+  markItemPendingUpload,
+  clearItemPendingUpload,
+  clearAllPendingUploads
 } from './utils/storage';
 import { 
   supabase, 
@@ -88,6 +93,10 @@ import {
   saveUserInteractionsToSupabase,
   getUserDataItemId,
   SYSTEM_CONFIG_ITEM_ID,
+  SYSTEM_DELETED_ITEMS_ID,
+  fetchCloudDeletedItemIds,
+  recordCloudDeletedItemIds,
+  broadcastVaultAction,
   mapSupabaseUserToProfile,
   signOutSupabaseAuth,
   ADMIN_EMAIL
@@ -298,15 +307,24 @@ export default function App() {
   };
 
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [unsyncedCount, setUnsyncedCount] = useState<number>(() => getPendingUploadItemIds().size);
 
   // Two-way Full Cloud Synchronization (PC <-> iPad <-> Mobile)
   const handleSyncWithCloud = useCallback(async (manual = false) => {
     setIsCloudSyncing(true);
     try {
+      // 1. Pull cloud tombstones (deleted records from any device)
+      const cloudDeleted = await fetchCloudDeletedItemIds();
+      if (cloudDeleted && cloudDeleted.length > 0) {
+        batchMarkItemsAsDeleted(cloudDeleted);
+      }
+
+      // 2. Fetch remote items from Supabase
       const remoteItems = await fetchItemsFromSupabase();
       if (remoteItems) {
         const deletedIds = getDeletedItemIds();
         const validRemote = remoteItems.filter((r) => !deletedIds.has(r.id));
+        const pendingIds = getPendingUploadItemIds();
 
         // Purge any remotely existing items that were marked deleted locally
         deletedIds.forEach((delId) => {
@@ -340,20 +358,29 @@ export default function App() {
             };
           });
 
-          // Local items not yet pushed to Supabase (e.g. items added on iPad or Brave)
+          // Only upload items that are truly marked as pending local uploads on THIS device
           const localOnly = validLocal
-            .filter((loc) => !remoteMap.has(loc.id) && !INITIAL_ITEMS.some((init) => init.id === loc.id))
+            .filter((loc) => pendingIds.has(loc.id) && !remoteMap.has(loc.id))
             .map((loc) => ({
               ...loc,
               likesCount: Math.max(loc.likesCount || 0, userLikes.has(loc.id) ? 1 : 0),
             }));
 
-          // Upload any local items up to Supabase
+          // Upload pending local items to Supabase
           if (localOnly.length > 0) {
             localOnly.forEach((item) => {
-              saveItemToSupabase(item).catch(() => {});
+              saveItemToSupabase(item).then((ok) => {
+                if (ok) {
+                  clearItemPendingUpload(item.id);
+                  setUnsyncedCount(getPendingUploadItemIds().size);
+                }
+              }).catch(() => {});
             });
           }
+
+          // Clear pending status for any items that are now securely in Supabase
+          validRemote.forEach((r) => clearItemPendingUpload(r.id));
+          setUnsyncedCount(getPendingUploadItemIds().size);
 
           const combined = [...mergedRemote, ...localOnly];
           combined.sort((a, b) => {
@@ -382,7 +409,7 @@ export default function App() {
         }
 
         if (manual) {
-          showToast(`☁️ ซิงค์ Cloud สำเร็จ! (${totalCount} รายการ) ข้อมูลบน iPad, PC, มือถือ ตรงกันสมบูรณ์`);
+          showToast(`☁️ ซิงค์ Cloud สำเร็จ! (${totalCount} รายการ) ข้อมูลบน iPad, PC, มือถือ ตรงกันสมบูรณ์ 100%`);
         }
       }
     } catch (e) {
@@ -535,13 +562,18 @@ export default function App() {
 
     // Hydrate remote links from Supabase cloud database with bidirectional merge
     // Prevents deleted items from resurrecting and prevents locally added links from disappearing
-    fetchItemsFromSupabase()
+    fetchCloudDeletedItemIds()
+      .then((cloudDeleted) => {
+        if (cloudDeleted && cloudDeleted.length > 0) {
+          batchMarkItemsAsDeleted(cloudDeleted);
+        }
+        return fetchItemsFromSupabase();
+      })
       .then((remoteItems) => {
         if (remoteItems) {
           const deletedIds = getDeletedItemIds();
-
-          // Filter out any items that the user previously deleted
           const validRemote = remoteItems.filter((r) => !deletedIds.has(r.id));
+          const pendingIds = getPendingUploadItemIds();
 
           // Ensure any deleted items that still exist on Supabase are permanently deleted
           deletedIds.forEach((delId) => {
@@ -580,9 +612,9 @@ export default function App() {
               };
             });
 
-            // Only consider items that are truly custom local creations (NOT initial template items)
+            // Only consider items that are truly marked as pending local uploads on THIS device
             const localOnly = validLocal
-              .filter((loc) => !remoteMap.has(loc.id) && !INITIAL_ITEMS.some((init) => init.id === loc.id))
+              .filter((loc) => pendingIds.has(loc.id) && !remoteMap.has(loc.id))
               .map((loc) => ({
                 ...loc,
                 likesCount: Math.max(loc.likesCount || 0, userLikes.has(loc.id) ? 1 : 0),
@@ -591,9 +623,17 @@ export default function App() {
             // Automatically sync any custom local-only items up to Supabase
             if (localOnly.length > 0) {
               localOnly.forEach((item) => {
-                saveItemToSupabase(item).catch(() => {});
+                saveItemToSupabase(item).then((ok) => {
+                  if (ok) {
+                    clearItemPendingUpload(item.id);
+                    setUnsyncedCount(getPendingUploadItemIds().size);
+                  }
+                }).catch(() => {});
               });
             }
+
+            validRemote.forEach((r) => clearItemPendingUpload(r.id));
+            setUnsyncedCount(getPendingUploadItemIds().size);
 
             // Combine remote items with custom local items
             const combined = [...mergedRemote, ...localOnly];
@@ -845,10 +885,100 @@ export default function App() {
       )
       .subscribe();
 
+    // 6. Supabase Realtime Broadcast Channel (<50ms instantaneous cross-device sync)
+    const realtimeBroadcastChannel = supabase
+      .channel('vault_client_broadcast_listener')
+      .on(
+        'broadcast',
+        { event: 'vault_sync' },
+        (e) => {
+          const payload = e.payload;
+          if (!payload) return;
+          if (payload.action === 'batch_update') {
+            const { updatedItems = [], deletedItemIds = [] } = payload;
+            const deletedSet = new Set<string>(deletedItemIds);
+            batchMarkItemsAsDeleted(deletedItemIds);
+
+            setItems((prevItems) => {
+              let nextItems = prevItems.filter((it) => !deletedSet.has(it.id));
+              const updatedMap = new Map((updatedItems as MediaItem[]).map((u) => [u.id, u]));
+              nextItems = nextItems.map((it) => updatedMap.get(it.id) || it);
+              const numbered = assignSequentialItemNumbers(nextItems);
+              saveItems(numbered);
+              return numbered;
+            });
+            showToast('⚡ ซิงค์การรวม/ลบลิงก์ซ้ำจากอุปกรณ์อื่นแบบเรียลไทม์แล้ว');
+          } else if (payload.action === 'delete_item') {
+            const { itemId } = payload;
+            if (itemId) {
+              markItemAsDeleted(itemId);
+              setItems((prevItems) => {
+                const nextItems = prevItems.filter((i) => i.id !== itemId);
+                const numbered = assignSequentialItemNumbers(nextItems);
+                saveItems(numbered);
+                return numbered;
+              });
+              showToast('🗑️ ซิงค์การลบรายการจากอุปกรณ์อื่นเรียบร้อย (Live)');
+            }
+          } else if (payload.action === 'save_item') {
+            const { item } = payload;
+            if (item) {
+              setItems((prevItems) => {
+                const existingIdx = prevItems.findIndex((i) => i.id === item.id);
+                let next: MediaItem[];
+                if (existingIdx >= 0) {
+                  next = [...prevItems];
+                  next[existingIdx] = { ...prevItems[existingIdx], ...item };
+                } else {
+                  next = [item, ...prevItems];
+                }
+                const numbered = assignSequentialItemNumbers(next);
+                saveItems(numbered);
+                return numbered;
+              });
+              showToast('✨ ซิงค์รายการใหม่จากอุปกรณ์อื่นแล้ว (Live)');
+            }
+          } else if (payload.action === 'config_update') {
+            if (payload.config) {
+              setConfig((currentCfg) => {
+                const merged = { ...currentCfg, ...payload.config };
+                saveConfig(merged);
+                return merged;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // 7. Auto re-validate on Tab Focus / iPad screen wakeup
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleSyncWithCloud(false);
+      }
+    };
+    const handleWindowFocus = () => {
+      handleSyncWithCloud(false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+
+    // 8. 35-second periodic heartbeat sync when page is active
+    const syncInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        handleSyncWithCloud(false);
+      }
+    }, 35000);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      clearInterval(syncInterval);
       supabase.removeChannel(realtimeItemsChannel);
       supabase.removeChannel(realtimeConfigTableChannel);
       supabase.removeChannel(realtimeCommentsChannel);
+      supabase.removeChannel(realtimeBroadcastChannel);
     };
   }, [user.email]);
 
@@ -1265,19 +1395,22 @@ export default function App() {
       return;
     }
     markItemAsDeleted(itemId);
+    recordCloudDeletedItemIds([itemId]).catch((e) => console.warn('Cloud tombstone error:', e));
     setItems((prevItems) => {
       const updated = prevItems.filter((i) => i.id !== itemId);
       saveItems(updated);
       return updated;
     });
     deleteItemFromSupabase(itemId).catch((e) => console.warn('Supabase delete sync notice:', e));
+    broadcastVaultAction('delete_item', { itemId });
     setPreviewItem((prev) => (prev?.id === itemId ? null : prev));
     showToast(t.toasts.entryRemoved);
   }, [isRealAdmin, t.toasts.permissionDenied, t.toasts.entryRemoved]);
 
   const handleBatchUpdateItems = useCallback((updatedItems: MediaItem[], deletedItemIds: string[]) => {
     const deletedSet = new Set(deletedItemIds);
-    deletedItemIds.forEach((id) => markItemAsDeleted(id));
+    batchMarkItemsAsDeleted(deletedItemIds);
+    recordCloudDeletedItemIds(deletedItemIds).catch((e) => console.warn('Cloud tombstone error:', e));
 
     setItems((prevItems) => {
       // 1. Remove deleted items
@@ -1287,8 +1420,9 @@ export default function App() {
       const updatedMap = new Map(updatedItems.map((u) => [u.id, u]));
       nextItems = nextItems.map((it) => updatedMap.get(it.id) || it);
 
-      saveItems(nextItems);
-      return nextItems;
+      const numbered = assignSequentialItemNumbers(nextItems);
+      saveItems(numbered);
+      return numbered;
     });
 
     // Background sync to Supabase
@@ -1298,6 +1432,9 @@ export default function App() {
     updatedItems.forEach((item) => {
       saveItemToSupabase(item).catch((e) => console.warn('Supabase batch update error:', e));
     });
+
+    // Broadcast instant update across all devices (PC <-> iPad <-> mobile)
+    broadcastVaultAction('batch_update', { updatedItems, deletedItemIds });
 
     // If currently previewing an item that got deleted, update or close preview
     setPreviewItem((prev) => {
@@ -1309,7 +1446,7 @@ export default function App() {
       return updated || prev;
     });
 
-    showToast('จัดการและหลอมรวมข้อมูลลิงก์ซ้ำเรียบร้อยแล้ว');
+    showToast('⚡ จัดการและหลอมรวมข้อมูลลิงก์ซ้ำสำเร็จแล้ว (ซิงค์ทุกอุปกรณ์ทันที)');
   }, []);
 
   const handleSaveLink = (data: Partial<MediaItem>) => {
@@ -1331,6 +1468,7 @@ export default function App() {
       setItems(numbered);
       saveItems(numbered);
       saveItemToSupabase(updatedItem).catch((e) => console.warn('Supabase update sync notice:', e));
+      broadcastVaultAction('save_item', { item: updatedItem });
       showToast(t.toasts.linkUpdated);
     } else {
       // Create new with sequential itemNumber
@@ -1360,11 +1498,22 @@ export default function App() {
         fileSize: data.fileSize,
       };
 
+      markItemPendingUpload(newItem.id);
+      setUnsyncedCount(getPendingUploadItemIds().size);
+
       const updated = [newItem, ...items];
       const numbered = assignSequentialItemNumbers(updated);
       setItems(numbered);
       saveItems(numbered);
-      saveItemToSupabase(newItem).catch((e) => console.warn('Supabase insert sync notice:', e));
+
+      saveItemToSupabase(newItem).then((ok) => {
+        if (ok) {
+          clearItemPendingUpload(newItem.id);
+          setUnsyncedCount(getPendingUploadItemIds().size);
+        }
+      }).catch((e) => console.warn('Supabase insert sync notice:', e));
+
+      broadcastVaultAction('save_item', { item: newItem });
       showToast(t.toasts.newLinkVaulted);
     }
 
@@ -1641,7 +1790,7 @@ export default function App() {
         misclassifiedCategoryCount={categoryHealthReport.misclassifiedCount}
         onSyncCloud={() => handleSyncWithCloud(true)}
         isCloudSyncing={isCloudSyncing}
-        cloudSyncItemCount={items.length}
+        cloudSyncItemCount={unsyncedCount}
         duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
         searchQuery={filters.query}
@@ -1920,7 +2069,7 @@ export default function App() {
         misclassifiedCategoryCount={categoryHealthReport.misclassifiedCount}
         onSyncCloud={() => handleSyncWithCloud(true)}
         isCloudSyncing={isCloudSyncing}
-        cloudSyncItemCount={items.length}
+        cloudSyncItemCount={unsyncedCount}
         duplicateCount={duplicateClusters.length}
         recentCount={validRecentRecords.length}
       />

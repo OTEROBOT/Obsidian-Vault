@@ -20,6 +20,7 @@ const KEYS = {
   GLOBAL_IMAGE_FIT: 'obsidian_vault_global_image_fit_v1',
   SAVED_FILTERS: 'obsidian_vault_filters_v1',
   VIEW_MODE: 'obsidian_vault_view_mode',
+  PENDING_UPLOAD_IDS: 'obsidian_vault_pending_upload_ids_v1',
 };
 
 // Safe storage wrapper that handles sandboxed iframe environments
@@ -81,6 +82,55 @@ export function markItemAsDeleted(id: string): void {
     storage.setItem(KEYS.DELETED_IDS, JSON.stringify(Array.from(ids)));
   } catch (e) {
     console.warn('Failed to store deleted id:', e);
+  }
+}
+
+export function batchMarkItemsAsDeleted(idsToRemove: string[]): void {
+  try {
+    const ids = getDeletedItemIds();
+    idsToRemove.forEach((id) => ids.add(id));
+    storage.setItem(KEYS.DELETED_IDS, JSON.stringify(Array.from(ids)));
+  } catch (e) {
+    console.warn('Failed to batch store deleted ids:', e);
+  }
+}
+
+export function getPendingUploadItemIds(): Set<string> {
+  try {
+    const raw = storage.getItem(KEYS.PENDING_UPLOAD_IDS);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    return new Set<string>(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+export function markItemPendingUpload(id: string): void {
+  try {
+    const ids = getPendingUploadItemIds();
+    ids.add(id);
+    storage.setItem(KEYS.PENDING_UPLOAD_IDS, JSON.stringify(Array.from(ids)));
+  } catch (e) {
+    console.warn('Failed to store pending upload id:', e);
+  }
+}
+
+export function clearItemPendingUpload(id: string): void {
+  try {
+    const ids = getPendingUploadItemIds();
+    ids.delete(id);
+    storage.setItem(KEYS.PENDING_UPLOAD_IDS, JSON.stringify(Array.from(ids)));
+  } catch (e) {
+    console.warn('Failed to remove pending upload id:', e);
+  }
+}
+
+export function clearAllPendingUploads(): void {
+  try {
+    storage.removeItem(KEYS.PENDING_UPLOAD_IDS);
+  } catch (e) {
+    console.warn('Failed to clear pending upload ids:', e);
   }
 }
 
